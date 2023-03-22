@@ -1,0 +1,48 @@
+version: '3'
+
+networks:
+  demkit_network:
+    external: true
+
+services:
+  demkit_influxdb:
+    container_name: influxdb
+    image: influxdb:1.8.10
+    restart: always
+    networks:
+      - demkit_network  
+    ports:
+      - "8086:8086"
+    volumes:
+     - "./docker/influxdb:/var/lib/influxdb"
+
+  demkit_grafana:
+    container_name: grafana
+    image: grafana/grafana:8.2.6
+    restart: always
+    networks:
+      - demkit_network  
+    ports:
+      - "3000:3000"
+    volumes:
+      - "./docker/grafana/lib:/var/lib/grafana"
+    depends_on:
+      - demkit_influxdb
+
+  # Optionally, demkit can also be run as a docker container
+  # demkit:
+    # container_name: demkit
+    # image: demkit:latest
+    # volumes:
+      # - "D:\\demkitsim\\workspace:/app/workspace"
+      # - "D:\\demkitsim\\demkit\\components\\:/app/demkit/components"
+    # environment:
+      # - DEMKIT_FOLDER=example
+      # - DEMKIT_MODEL=demohouse
+      # - DEMKIT_COMPONENTS=/app/demkit/components/
+      # - DEMKIT_INFLUXURL=http://demkit_influxdb
+      # - DEMKIT_INFLUXPORT=8086
+      # - DEMKIT_INFLUXDB=dem
+    # depends_on:
+      # - demkit_influxdb
+      # - demkit_grafana
