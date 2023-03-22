@@ -16,7 +16,7 @@ Furthermore, the following PhD dissertations form the foundation of DEMKit regar
 
 - T. van der Klauw, "Decentralized Energy Management with Profile Steering: Resource Allocation Problems in Energy Management", PhD Thesis, University of Twente, Enschede, the Netherlands. Available: https://research.utwente.nl/en/publications/decentralized-energy-management-with-profile-steering-resource-al
 
-- R.P. van Leeuwen, which are also implemented in DEMKit. For more information on these models and control refer to: R.P. van Leeuwen, "Towards 100% renewable energy supply for urban areas and the role of smart control", PhD Thesis, University of Twente, Enschede, the Netherlands. Available: https://research.utwente.nl/en/publications/towards-100-renewable-energy-supply-for-urban-areas-and-the-role-
+- R.P. van Leeuwen, "Towards 100% renewable energy supply for urban areas and the role of smart control", PhD Thesis, University of Twente, Enschede, the Netherlands. Available: https://research.utwente.nl/en/publications/towards-100-renewable-energy-supply-for-urban-areas-and-the-role-
 
 ## How to cite
 
