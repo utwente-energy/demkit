@@ -44,7 +44,7 @@ The easiest method is to have a setup utilizing Docker (https://www.docker.com/)
 1. Download the setup file from the setup-folder (*.bat for Windows, *.sh for UNIX-based systems) and place it in the folder where you wish to install DEMKit.
 2. Execute the file, which should install all software and build the DEMKit Docker image automatically. In the end, a demonstration simulation is executed.
 
-To verify if your setup is functioning, browse to http://localhost:3000 and select the Example dashboard. Now you should see the results of your first simulation. 
+To verify if your setup is functioning, browse to http://localhost:3000, login using username=admin password=admin and select the Example dashboard. Now you should see the results of your first simulation. 
 
 #### Running
 You can run simulations by executing the "rundemkit.bat" file (Windows) or execute "docker compose up" on the command-line in the DEMKit folder. The "docker-compose.yaml" file contains the configuration, which you can modify to run another simulation scenario by modifying::
