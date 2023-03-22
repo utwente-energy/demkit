@@ -1,0 +1,22 @@
+version: '3.5'
+
+networks:
+  demkit_network:
+    external: true
+      
+services:
+  demkit: 
+    container_name: demkit
+    image: demkit:latest
+    networks:
+      - demkit_network   
+    volumes:
+      - "./../workspace/:/app/workspace"
+      - "./components/:/app/demkit/components"
+    environment:
+      - DEMKIT_FOLDER=example
+      - DEMKIT_MODEL=demohouse
+      - DEMKIT_COMPONENTS=/app/demkit/components/
+      - DEMKIT_INFLUXURL=http://demkit_influxdb
+      - DEMKIT_INFLUXPORT=8086
+      - DEMKIT_INFLUXDB=dem
