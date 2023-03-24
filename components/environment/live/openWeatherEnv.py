@@ -41,7 +41,7 @@ class OpenWeatherEnv(WeatherEnv):
 		self.retrieving = False
 
 		self.supportsForecast = True
-		# Sample url= http://api.openweathermap.org/data/2.5/weather?lat=52.2215372&lon=6.8936619&units=metric&APPID=825c585b3d9169bce8e3e0f3fee352ce
+		# Sample url= http://api.openweathermap.org/data/2.5/weather?lat=52.2215372&lon=6.8936619&units=metric&APPID=S0m3R4nd0mT0k3n
 
 		self.reader = None
 
