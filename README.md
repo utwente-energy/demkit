@@ -32,9 +32,9 @@ The software requires Python 3.x (3.11 is tested)(https://www.python.org/) and d
 
 DEMKit consists of two parts: 
 1. The core DEMKit code with all components (this repository)
-2. A workspace with so-called simualtion scenarios (models), utilizing the components and code of DEMKit. An example can be obtained here: https://github.com/utwente-energy/demkit-example 
+2. A workspace with so-called simulation scenarios (models), utilizing the components and code of DEMKit. An example can be obtained here: https://github.com/utwente-energy/demkit-example 
 
-Various methods to install DEMKit are possible, provided the the requirements are met. However, we recommned to use one of the following two approaches. For a more detailed description, refer to the setup guide that can be found in the "doc" folder.
+Various methods to install DEMKit are possible, provided that the requirements are met. However, we recommned to use one of the following two approaches. For a more detailed description, refer to the setup guide that can be found in the "doc" folder.
 
 ### Docker-based setup
 
