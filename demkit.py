@@ -47,9 +47,9 @@ sys.stderr.write(" :NMMMMMMMMMMMMMMMohy`       /MMMMMMMMMMMMMMh`        .MMMMMMM
 sys.stderr.write(".mmmmmmmmmmmmmmmmmm/shyyyyyo `ymmmmmmmmmmmms           smmmmmmmmmmmmmmmmmmmh.  .hmh-             :dmy` -yyyyyyyyyyyyyyd:")
 sys.stderr.write(" ")
 sys.stderr.write("________________________________________________________________________________________________________________________\n")
-sys.stderr.write('DEMKit version 2023.3\n')
+sys.stderr.write('DEMKit version 2023.4\n')
 sys.stderr.write('Copyright 2023 University of Twente, Enschede, the Netherlands\n\n')
-sys.stderr.write('Licensed under the Apache License, Version 2.0 (the "License")\n')
+sys.stderr.write('Licensed under the Apache License, Version 2.0\n')
 sys.stderr.write("________________________________________________________________________________________________________________________\n")
 sys.stderr.flush()
 
