@@ -246,6 +246,10 @@ class LoadCtrl(DevCtrl):
 
 			self.lockPlanning.acquire()
 			for c in self.commodities:
+				# Instantiate a realized dict if not available
+				if c not in self.realized:
+					self.realized[c] = {}
+
 				updateProfile[c] = []
 				while idx < len(prediction):
 					if idx == 0:
@@ -255,6 +259,8 @@ class LoadCtrl(DevCtrl):
 							updateProfile[c].append(prediction[idx] - self.realized[c][time])
 						except:
 							updateProfile[c].append(prediction[idx])
+
+						# Update the realized profile
 						self.realized[c][time] = prediction[idx]
 
 					if self.forwardLogging and self.host.logControllers:
