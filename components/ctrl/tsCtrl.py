@@ -72,7 +72,9 @@ class TsCtrl(DevCtrl):
 					for i in range(0, len(s.lowerLimits[c])):
 						s.lowerLimits[c][i] -= profileResult[c][i]
 
-		#now add the local realized profile to the result
+		# The following code is required to create a consistent bookkeeping
+		# With event-based control, timeshifters do update the realized profile differently
+		# Plus, event scheduled devices are not replanned if their job spans two planning iterations
 		if self.useEventControl:
 			for c in self.commodities:
 				if c not in self.realized:
@@ -97,13 +99,14 @@ class TsCtrl(DevCtrl):
 						i+=1
 						progress+=1
 
-
 		# calculate the improvement
 		improvement = 0.0
 		boundImprovement = 0.0
 		if requireImprovement:
 			improvement = self.calculateImprovement(signal.desired, copy.deepcopy(self.candidatePlanning[self.name]), profileResult)
 			boundImprovement = self.calculateBoundImprovement(copy.deepcopy(self.candidatePlanning[self.name]), profileResult, signal.upperLimits, signal.lowerLimits, norm=2)
+
+			# print(improvement)
 
 			if signal.allowDiscomfort:
 				improvement = max(improvement, boundImprovement)
@@ -189,7 +192,45 @@ class TsCtrl(DevCtrl):
 			profileResult[c][i+startIdx] += p[i]
 
 		return profileResult
-		
+
+	# Overriding endSynchronizedPlanning to handle realized profiles properly
+	def endSynchronizedPlanning(self, signal):
+		self.lockPlanning.acquire()
+		if self.useEventControl:
+			# USed to create a local planning in event based control to fix differences/infeasible schedules that may have emerged in the time since the planning started
+			# This mainly has to do with asynchronous events in demonstration
+			# Get the update device state
+			self.devDataPlanning = copy.deepcopy( self.updateDeviceProperties() )
+
+			# Creating an empty steering signal, this will force the device to stick to its own planning as much as possible
+			d = {}
+			for c in self.commodities:
+				d[c] = [complex(0.0, 0.0)] * signal.planHorizon
+			signal.desired = d
+
+			self.lockPlanning.release()
+			r = self.doPlanning(signal, False)
+			self.lockPlanning.acquire()
+
+			self.planningTimestamp = self.host.time()
+			if self.staticDevice:
+				self.setPlan(r['profile'], signal.time, signal.timeBase)
+
+		# perform forward logging if desired to expose the planning to a user :)
+		if self.forwardLogging and self.host.logControllers:
+			for c in signal.commodities:
+				for i in range(0,  signal.planHorizon):
+					self.logValue("W-power.plan.real.c."+c,  self.plan[c][int(signal.time + i*signal.timeBase)].real, int(signal.time + i*signal.timeBase))
+					if self.host.extendedLogging:
+						self.logValue("W-power.plan.imag.c." + c, self.plan[c][int(signal.time + i*signal.timeBase)].imag, int(signal.time + i * signal.timeBase))
+
+					if self.useEventControl:
+						self.logValue("W-power.realized.imag.c." + c,self.realized[c][int(signal.time + i * signal.timeBase)].imag,int(signal.time + i * signal.timeBase))
+						if self.host.extendedLogging:
+							self.logValue("W-power.realized.real.c." + c,self.realized[c][int(signal.time + i * signal.timeBase)].real,int(signal.time + i * signal.timeBase))
+
+		self.lockPlanning.release()
+		return dict(self.realized)
 
 	def requestCancelation(self):
 		assert(False) # Unimplemented at this moment, placeholder
