@@ -282,45 +282,92 @@ class GroupCtrl(OptCtrl):
 		return result
 
 	def doPlanning(self, signal):
-		# This will trigger the core Profile Steering algorithm a few times. The structure follows the ISGT EU 2020 paper ( #FIXME Unpublished yet, reference follows later)
+		# This will trigger the core Profile Steering algorithm a few times. The structure follows the ISGT EU 2020 paper: https://ieeexplore.ieee.org/document/9248766
 		# We need to reset if we are planning, reset = False during initial planning to establish a feasible starting point!
 
 		result = {}
 		result['profile'] = copy.deepcopy(self.candidatePlanning[self.name])
 		s = copy.deepcopy(signal)
 
-		# FIXME congestionpoints should have the option to provide a vector of bounds instead. T211
-		if self.congestionPoint is not None and not self.allowDiscomfort: # DOn't know the usage of the latter part
+		#####################################
+		#  Preparation of the local steering signal
+		#####################################
+		if self.congestionPoint is not None and not self.allowDiscomfort:
 			for c in self.commodities:
 				if not self.checkBoundViolations(c, self.candidatePlanning[self.name][c]):
 					# Adapt the steering signal to steer towards a feasible solution
 					for i in range(0, len(s.desired[c])):
-						s.desired[c][i] = max(self.congestionPoint.getLowerLimit(c).real, min(s.desired[c][i].real, self.congestionPoint.getUpperLimit(c).real))
+						s.desired[c][i] = (self.congestionPoint.getLowerLimit(
+							c).real + self.congestionPoint.getUpperLimit(c).real) / 2
 
+
+
+
+		#####################################
+		#  Performing a normal planning
+		#####################################
 		# Perform a normal planning with bounds imposed when applicable
+		# This is the naive planning in case of congestion point limits
+		# This differs from the papers on congestion management as we found an initial naive planning steering as far from the bounds  as possible might improve the results significantly
 		if self.parent is None:
 			self.logMsg("Executing a normal iterative planning phase.")
 		result = self.iterativePlanning(s)
 
-		if self.congestionPoint is not None and not self.strictComfort: # and not self.allowDiscomfort
+		#####################################
+		#  Verification of feasibility
+		#####################################
+		# Then we check if we have to abide limitations and test if we are meeting the limitations
+		if self.congestionPoint is not None:
 			withinLimits = True
 			for c in self.commodities:
 				if not self.checkBoundViolations(c, self.candidatePlanning[self.name][c]):
 					withinLimits = False
-					# Adapt the steering signal to steer towards a feasible solution
-					for i in range(0, len(s.desired[c])):
-						s.desired[c][i] = max(self.congestionPoint.getLowerLimit(c).real, min(s.desired[c][i].real, self.congestionPoint.getUpperLimit(c).real))
 
-			if not withinLimits:
+			#####################################
+			#  Steering towards a better profile if possible by resetting to the original objective
+			#####################################
+			# We need to make different decisions whether or not we may/should perform load-shedding or curtailment (strictComfort = False):
+			# Strict comfort enforced either locally or by a higher level controller
+
+			# We have found a feasible schedule, now we can restore the original desired signal
+			if withinLimits:
+				# Then we perform more profile steering iterations for better performance
 				s = copy.deepcopy(signal)
-				s.allowDiscomfort = True
-				self.allowDiscomfort = True
 				if self.parent is None:
-					self.logMsg("No feasible solution proposed, performing load-shedding and curtailment.")
+					self.logMsg("Feasible solution found, performing follow-up interations with the original objective.")
 				result = self.iterativePlanning(s)
 
+			#####################################
+			#  Enable load-shedding and curtailment in case of an infeasible solution (if allowed)
+			#####################################
+			else:
+				if not self.strictComfort:
+					# Perform load-shedding by setting options and adapt the signal
+					s = copy.deepcopy(signal)
+					s.allowDiscomfort = True
+					self.allowDiscomfort = True
 
-		# Bookkeeping of the planning
+					# Adapt the steering signal to steer towards a feasible solution
+					for i in range(0, len(s.desired[c])):
+						# s.desired[c][i] = max(self.congestionPoint.getLowerLimit(c).real, min(s.desired[c][i].real, self.congestionPoint.getUpperLimit(c).real))
+						s.desired[c][i] = (self.congestionPoint.getLowerLimit(
+							c).real + self.congestionPoint.getUpperLimit(c).real) / 2
+
+					if self.parent is None:
+						self.logMsg("No feasible solution proposed, performing load-shedding and curtailment.")
+					result = self.iterativePlanning(s)
+
+
+				# Load shedding not allowed, return whatever we have
+				else:
+					if self.parent is None:
+						self.logMsg("No feasible solution proposed, returning the best found solution")
+
+
+
+		#####################################
+		#  Bookkeeping
+		#####################################
 		self.lastPlannedTime = (signal.planHorizon * signal.timeBase) + signal.time
 		self.nextPlan = (signal.time - (signal.time % (self.planInterval * self.timeBase))) + (self.planInterval * self.timeBase) + self.alignNextPlan
 		if self.nextPlan - signal.time > (self.planInterval * self.timeBase):
@@ -344,13 +391,17 @@ class GroupCtrl(OptCtrl):
 		# Preparing steering data and local variables
 		participatingChildren = list(self.children)
 		simultaneousCommits = len(self.children)
-		if self.simultaneousCommits is not None:
+		# Setting the configured setting, except for when utilizing curtialment (self.allowDiscomfort)
+		if self.simultaneousCommits is not None and not self.allowDiscomfort:
 			simultaneousCommits = self.simultaneousCommits
 
 		# Setting the maximum number of iterations. Defaulting to len(self.children)
 		maxIters = self.maxIters
 		if maxIters is None:
-			maxIters = math.ceil(math.sqrt(len(self.children))*2)
+			if self.simultaneousCommits is not None and not self.allowDiscomfort:
+				maxIters = math.ceil(math.sqrt(len(self.children))*2)
+			else:
+				maxIters = len(self.children)*3
 
 		#####################################
 		#  Preparation of the local steering signal
@@ -376,7 +427,7 @@ class GroupCtrl(OptCtrl):
 		for i in range(0, maxIters):
 			if self.parent == None or self.parentConnected == False:
 				self.logMsg("Planning iteration: " + str(i))
-				# Peform a reset on all children
+				# Perform a reset on all children
 				self.resetPlanning([])
 
 			assert (simultaneousCommits > 0)
@@ -450,6 +501,7 @@ class GroupCtrl(OptCtrl):
 			sortedImprovements = OrderedDict(sorted(improvements.items(), key=lambda k: k[1], reverse=True))
 
 			# Select the children (winners) with the highest contribution
+			# The case where we perform load shedding (normal case in the else-construct)
 			if signal.allowDiscomfort:
 				for child, val in results.items():
 					boundImprovements[child] = val['boundImprovement']
@@ -474,25 +526,27 @@ class GroupCtrl(OptCtrl):
 							if self.parent is None or self.parentConnected == False:
 								self.zCall(child, 'setPlanningWinner', time, timeBase, self.name, [])
 
-			# Select the children (winners) with the highest contribution
-			for child, improvement in sortedImprovements.items():
-				if len(winners) < simultaneousCommits and winners.count(child) == 0:
-					if improvement > 0.0 or i == 0:
-						winners.append(child)
-						if self.planningWinners.count(child) == 0:
-							self.planningWinners.append(child)
+			# This is the normal algorithm where we use the normal selection procedure
+			else:
+				# Select the children (winners) with the highest contribution
+				for child, improvement in sortedImprovements.items():
+					if len(winners) < simultaneousCommits and winners.count(child) == 0:
+						if improvement > 0.0 or i == 0:
+							winners.append(child)
+							if self.planningWinners.count(child) == 0:
+								self.planningWinners.append(child)
 
-						if improvement > bestImprovement:
-							bestImprovement = improvement
+							if improvement > bestImprovement:
+								bestImprovement = improvement
 
-						# Perform bookkeeping and updating profiles
-						childData = self.zCall(child, 'setIterationWinner', self.name, None)
-						for c in self.commodityIntersection(childData['profile'].keys()):
-							iterationPlanning[c] = list(np.array(iterationPlanning[c]) + np.array(childData['profile'][c]))
+							# Perform bookkeeping and updating profiles
+							childData = self.zCall(child, 'setIterationWinner', self.name, None)
+							for c in self.commodityIntersection(childData['profile'].keys()):
+								iterationPlanning[c] = list(np.array(iterationPlanning[c]) + np.array(childData['profile'][c]))
 
-						# Finalize the planning when we are the root controller
-						if self.parent is None or self.parentConnected == False:
-							self.zCall(child, 'setPlanningWinner', time, timeBase, self.name, [])
+							# Finalize the planning when we are the root controller
+							if self.parent is None or self.parentConnected == False:
+								self.zCall(child, 'setPlanningWinner', time, timeBase, self.name, [])
 
 			#####################################
 			#  Stopping conditions
@@ -506,7 +560,11 @@ class GroupCtrl(OptCtrl):
 					simultaneousCommits = 1
 			else:
 				# Update the number of simultaneous commits for the next iteration
-				simultaneousCommits = max(1, int(simultaneousCommits / self.multipleCommitsDivisor))
+				if not self.allowDiscomfort:
+					simultaneousCommits = max(1, int(simultaneousCommits / self.multipleCommitsDivisor))
+				if self.allowDiscomfort:
+					# In case of load shedding, we want to perform the shedding as equal as possible
+					simultaneousCommits = max(1, int(simultaneousCommits-1))
 
 
 		#####################################
