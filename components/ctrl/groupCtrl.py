@@ -349,9 +349,9 @@ class GroupCtrl(OptCtrl):
 
 					# Adapt the steering signal to steer towards a feasible solution
 					for i in range(0, len(s.desired[c])):
-						# s.desired[c][i] = max(self.congestionPoint.getLowerLimit(c).real, min(s.desired[c][i].real, self.congestionPoint.getUpperLimit(c).real))
-						s.desired[c][i] = (self.congestionPoint.getLowerLimit(
-							c).real + self.congestionPoint.getUpperLimit(c).real) / 2
+						s.desired[c][i] = max(self.congestionPoint.getLowerLimit(c).real, min(s.desired[c][i].real, self.congestionPoint.getUpperLimit(c).real))
+						# s.desired[c][i] = (self.congestionPoint.getLowerLimit(
+						# 	c).real + self.congestionPoint.getUpperLimit(c).real) / 2
 
 					if self.parent is None:
 						self.logMsg("No feasible solution proposed, performing load-shedding and curtailment.")
@@ -398,10 +398,15 @@ class GroupCtrl(OptCtrl):
 		# Setting the maximum number of iterations. Defaulting to len(self.children)
 		maxIters = self.maxIters
 		if maxIters is None:
-			if self.simultaneousCommits is not None and not self.allowDiscomfort:
+			if self.simultaneousCommits is not None:
 				maxIters = math.ceil(math.sqrt(len(self.children))*2)
 			else:
-				maxIters = len(self.children)*3
+				maxIters = len(self.children)*2
+
+		# Adjusting number of iterations when curtailment is enabled. Many iterations may be required for balancing!
+		if self.allowDiscomfort:
+			maxIters = len(self.children)*2
+
 
 		#####################################
 		#  Preparation of the local steering signal
@@ -502,6 +507,7 @@ class GroupCtrl(OptCtrl):
 
 			# Select the children (winners) with the highest contribution
 			# The case where we perform load shedding (normal case in the else-construct)
+
 			if signal.allowDiscomfort:
 				for child, val in results.items():
 					boundImprovements[child] = val['boundImprovement']
@@ -562,8 +568,9 @@ class GroupCtrl(OptCtrl):
 				# Update the number of simultaneous commits for the next iteration
 				if not self.allowDiscomfort:
 					simultaneousCommits = max(1, int(simultaneousCommits / self.multipleCommitsDivisor))
+
+				# In case of load shedding, we want to perform the shedding as equal as possible
 				if self.allowDiscomfort:
-					# In case of load shedding, we want to perform the shedding as equal as possible
 					simultaneousCommits = max(1, int(simultaneousCommits-1))
 
 
