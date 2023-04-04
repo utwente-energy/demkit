@@ -293,12 +293,18 @@ class GroupCtrl(OptCtrl):
 		#  Preparation of the local steering signal
 		#####################################
 		if self.congestionPoint is not None and not self.allowDiscomfort:
+			withinLimits = True
 			for c in self.commodities:
 				if not self.checkBoundViolations(c, self.candidatePlanning[self.name][c]):
-					# Adapt the steering signal to steer towards a feasible solution
-					for i in range(0, len(s.desired[c])):
-						s.desired[c][i] = (self.congestionPoint.getLowerLimit(
-							c).real + self.congestionPoint.getUpperLimit(c).real) / 2
+					withinLimits = False
+
+			if not withinLimits:
+				for c in self.commodities:
+					if not self.checkBoundViolations(c, self.candidatePlanning[self.name][c]):
+						# Adapt the steering signal to steer towards a feasible solution
+						for i in range(0, len(s.desired[c])):
+							s.desired[c][i] = (self.congestionPoint.getLowerLimit(
+								c).real + self.congestionPoint.getUpperLimit(c).real) / 2
 
 
 
