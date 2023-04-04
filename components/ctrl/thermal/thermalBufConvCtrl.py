@@ -191,23 +191,10 @@ class ThermalBufConvCtrl(ThermalDevCtrl):
 					ul = list(signal.lowerLimits[c])
 					ll = list(signal.upperLimits[c])
 
-				# Select the upper limits
-				if len(upperLimits) == 0:
-					for i in ul:
-						upperLimits.append(i * cop)
-				else:
-					for i in range(0, len(ul)):
-						if ul[i] * cop < upperLimits[i]:
-							upperLimits[i] = ul[i]*cop
-
-				# Select the lower limits
-				if len(lowerLimits) == 0:
-					for i in ul:
-						lowerLimits.append(i * cop)
-				else:
-					for i in range(0, len(ul)):
-						if ll[i] * cop < lowerLimits[i]:
-							lowerLimits[i] = ll[i]*cop
+				for i in ul:
+					upperLimits.append(i * abs(cop))
+				for i in ll:
+					lowerLimits.append(i * abs(cop))
 
 		# Convert the desired profile into a desired profile in terms of heat
 		desired = [0] * signal.planHorizon

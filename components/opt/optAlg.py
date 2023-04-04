@@ -427,13 +427,13 @@ class OptAlg:
 				totalUpper = 0.0
 
 				for i in range(0, len(desired)):
-					#         In this case we have a higher lower limit than upper limit, this means we are waaaay to restrictive and we just try to get to the point
-					#         dead in the center of the two. NOTE: should never happen (dumb user input?)
-					#            GERWIN: Dumb user input must result in a hard exit this deep, checks must be in place at a higher level. Hence an assertion here.
+					#  In this case we have a higher lower limit than upper limit, this means we are waaaay to restrictive and we just try to get to the point
+					#  dead in the center of the two. NOTE: should never happen (dumb user input?)
+					#  GERWIN: Dumb user input must result in a hard exit this deep, checks must be in place at a higher level. Hence an assertion here!
 					assert (powerLimitsLower[i] <= powerLimitsUpper[i])
 
 					lowerLimits[i] = chargingPowers[self.lowerChargingIndex(chargingPowers, powerLimitsLower[i], efficiency)]
-					totalLower += chargingPowers[self.lowerChargingIndex(chargingPowers, powerLimitsLower[i], efficiency)]  # max(chargingPowers[0], powerLimitsLower[i])
+					totalLower += chargingPowers[self.lowerChargingIndex(chargingPowers, powerLimitsLower[i], efficiency)]
 					upperLimits[i] = chargingPowers[self.upperChargingIndex(chargingPowers, powerLimitsUpper[i], efficiency)]
 					totalUpper += chargingPowers[self.upperChargingIndex(chargingPowers, powerLimitsUpper[i], efficiency)]
 
@@ -592,9 +592,9 @@ class OptAlg:
 
 	def lowerChargingIndex(self, chargingPowers, limit, efficiency):
 		i = 0
-		while chargingPowers[i] * efficiency[i] < limit and i + 1 < len(chargingPowers):
+		while chargingPowers[i] * efficiency[i] < limit and i < len(chargingPowers):
 			i += 1
-		return i
+		return max(i-1, 0)
 
 	def upperChargingIndex(self, chargingPowers, limit, efficiency):
 		i = len(chargingPowers) - 1
