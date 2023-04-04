@@ -20,6 +20,7 @@ import util.helpers
 import copy
 import numpy as np
 import math
+import random
 
 #Buffer converter controller
 class ThermalBufConvCtrl(ThermalDevCtrl):
@@ -29,6 +30,9 @@ class ThermalBufConvCtrl(ThermalDevCtrl):
 		self.devtype = "BufferConverterController"
 
 		self.useReactiveControl = False #Heat pumps dont do this
+
+		self.replanInterval = [4 * 900, 8 * 900]
+		self.allowReplanning = True  # Allow intermediate replanning for event-based planning
 
 		self.commodities = ['ELECTRICITY', 'HEAT']
 		self.weights = {'ELECTRICITY': 1.0, 'HEAT': 0.0}
@@ -127,17 +131,7 @@ class ThermalBufConvCtrl(ThermalDevCtrl):
 				try:
 					currentPlan[c].append(self.realized[c][t])
 				except:
-					currentPlan[c].append(complex(0,0))
-
-		# for c in self.commodities:
-		# 	for i in range(0,  len(signal.desired[c])):
-		# 		t = int((signal.time - (signal.time%signal.timeBase)) + i*self.timeBase)
-		# 		try:
-		# 			signal.desired[c][i] = 0.5*self.plan[c][t] + 0.5*signal.desired[c][i]
-		# 		except:
-		# 			signal.desired[c][i] = 0.0
-
-
+					currentPlan[c].append(complex(0, 0))
 
 		result = self.bufPlanning(signal, copy.deepcopy(currentPlan), consumption, False)
 		plan = copy.deepcopy(result['profile'])
@@ -220,14 +214,14 @@ class ThermalBufConvCtrl(ThermalDevCtrl):
 		# We do so by checking by how much we need ot change the demand.
 		if signal.allowDiscomfort and not self.strictComfort and len(upperLimits) > 0 and len(lowerLimits) > 0:
 			# Obtain the total energy demand
-			total = 0.0
+			total = 0.00
 			for val in cons:
 				total += val.real
 
 			if total > 0:
 				# See what we can do with both bonds
-				upper = 0
-				lower = 0
+				upper = 0.0
+				lower = 0.0
 				for val in upperLimits:
 					upper += val.real
 				for val in lowerLimits:
@@ -240,7 +234,7 @@ class ThermalBufConvCtrl(ThermalDevCtrl):
 				lower -= cap-soc
 
 				# Find what is possible in terms of energy
-				fraction = max(0, max(lower, min(total, upper)) / total )
+				fraction = max(0.0, max(lower, min(total, upper)) / total)
 
 				# Scale the consumption
 				for i in range(0, len(cons)):
@@ -281,14 +275,25 @@ class ThermalBufConvCtrl(ThermalDevCtrl):
 			else:
 				profileResult[c] = list(p)
 
-		#calculate the improvement
+		# calculate the improvement
 		improvement = 0.0
+		boundImprovement = 0.0
 		if requireImprovement:
-			improvement = self.calculateImprovement(s.desired,  copy.deepcopy(self.candidatePlanning[self.name]),  profileResult)
-			if(improvement <= 0.0):
+			improvement = self.calculateImprovement(signal.desired, copy.deepcopy(self.candidatePlanning[self.name]), profileResult)
+			boundImprovement = self.calculateBoundImprovement(copy.deepcopy(self.candidatePlanning[self.name]),  profileResult, signal.upperLimits, signal.lowerLimits, norm=2)
+
+			if signal.allowDiscomfort and boundImprovement > 0.0:
+				improvement = max(improvement, boundImprovement)
+
+			if improvement < 0.0 or boundImprovement < 0.0:
+				improvement = 0.0
 				profileResult = copy.deepcopy(self.candidatePlanning[self.name])
 
-		#send out the result
+		# select a random new plan interval
+		self.nextPlan = self.host.time() + random.randint(self.replanInterval[0], self.replanInterval[1])
+
+		# send out the result
+		result['boundImprovement'] = boundImprovement
 		result['improvement'] = max(0.0, improvement)
 		result['profile'] = copy.deepcopy(profileResult)
 

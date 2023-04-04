@@ -404,7 +404,7 @@ class GroupCtrl(OptCtrl):
 		# Setting the maximum number of iterations. Defaulting to len(self.children)
 		maxIters = self.maxIters
 		if maxIters is None:
-			if self.simultaneousCommits is not None:
+			if self.simultaneousCommits is None:
 				maxIters = math.ceil(math.sqrt(len(self.children))*2)
 			else:
 				maxIters = len(self.children)*2
