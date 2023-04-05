@@ -252,7 +252,7 @@ class ThermalBufConvCtrl(ThermalDevCtrl):
 		assert(devData['producingPowers'][0] == 0 or devData['producingPowers'][-1] == 0)
 		powers = []
 		for p in devData['producingPowers']:
-			if p <0:
+			if p < 0:
 				powers.append(abs(p))
 			else:
 				powers.append(p)
