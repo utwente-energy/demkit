@@ -292,8 +292,8 @@ class GroupCtrl(OptCtrl):
 		#####################################
 		#  Preparation of the local steering signal
 		#####################################
+		withinLimits = True
 		if self.congestionPoint is not None and not self.allowDiscomfort:
-			withinLimits = True
 			for c in self.commodities:
 				if not self.checkBoundViolations(c, self.candidatePlanning[self.name][c]):
 					withinLimits = False
@@ -323,7 +323,7 @@ class GroupCtrl(OptCtrl):
 		#  Verification of feasibility
 		#####################################
 		# Then we check if we have to abide limitations and test if we are meeting the limitations
-		if self.congestionPoint is not None:
+		if self.congestionPoint is not None and not withinLimits:
 			withinLimits = True
 			for c in self.commodities:
 				if not self.checkBoundViolations(c, self.candidatePlanning[self.name][c]):
@@ -412,6 +412,8 @@ class GroupCtrl(OptCtrl):
 		# Adjusting number of iterations when curtailment is enabled. Many iterations may be required for balancing!
 		if self.allowDiscomfort:
 			maxIters = len(self.children)*2
+
+
 
 
 		#####################################

@@ -197,18 +197,12 @@ class ThermalBufConvCtrl(ThermalDevCtrl):
 			for i in range(0, len(desired)):
 				desired[i] += s.desired[c][i] * devData['cop'][c] * s.weights[c]
 
-				if len(upperLimits) > 0 and len(lowerLimits) > 0:
-					# Make the desired profile fit in the new bounds
-					desired[i] = max(lowerLimits[i].real, max(desired[i].real, upperLimits[i].real))
-
 		prices = [0] * signal.planHorizon
 		if s.profileWeight < 1:
 			for c in commodities:
 				for i in range(0, len(desired)):
 					prices[i] += s.prices[c][i].real * devData['cop'][c].real
 
-
-		#cons = list(consumption)
 
 		# Create the consumption vector
 		# Here we need to invert the consumption for cooling and do so based on the capabilies of the device
