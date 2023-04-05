@@ -183,14 +183,6 @@ class HeatSourceDev(ThermalDevice):
 					# Internal bookkeeping
 					consumption = producedPowerZone['HEAT']
 
-			# FIXME: Resolved in the thermal model instead!
-			if False:
-				if coolDemand >= -0.1 and heatDemand <= 0.1:
-					# Turn everything off
-					producedPowerZone['HEAT'] = 0.0
-					self.zSet(self.zones, 'heatSupply', producedPowerZone)
-					self.zSet(self.zones, 'heatTemperature', producedTemperatureZone)
-
 			return consumption
 
 	def logStats(self, time):
