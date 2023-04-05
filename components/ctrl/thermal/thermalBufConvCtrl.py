@@ -208,7 +208,20 @@ class ThermalBufConvCtrl(ThermalDevCtrl):
 					prices[i] += s.prices[c][i].real * devData['cop'][c].real
 
 
-		cons = list(consumption)
+		#cons = list(consumption)
+
+		# Create the consumption vector
+		# Here we need to invert the consumption for cooling and do so based on the capabilies of the device
+		cons = []
+		for v in consumption:
+			# Check if we are a heating device
+			if v > 0 and devData['producingPowers'][-1] > 0.1:
+				cons.append(v)
+			elif v < 0 and devData['producingPowers'][0] < -0.1:
+				cons.append(abs(v))
+			else:
+				cons.append(0.0)
+
 
 		# If we have load shedding, we can see if we can reduce the demand (e.g. cooling down the building a bit more) to reduce the energy consumption
 		# We do so by checking by how much we need ot change the demand.
@@ -240,6 +253,16 @@ class ThermalBufConvCtrl(ThermalDevCtrl):
 				for i in range(0, len(cons)):
 					cons[i] *= fraction
 
+		# In order to support cooling devices, we need to also invert the power rating
+		# And also we cannot support hybrid mode, assuming a sorted list here:
+		assert(devData['producingPowers'][0] == 0 or devData['producingPowers'][-1] == 0)
+		powers = []
+		for p in devData['producingPowers']:
+			if p <0:
+				powers.append(abs(p))
+			else:
+				powers.append(p)
+		powers.sort()
 
 		# Now we call Thijs vd Klauw's buffer planning magic
 		# But we scale all to Wtau instead of Wh
@@ -250,7 +273,7 @@ class ThermalBufConvCtrl(ThermalDevCtrl):
 								   devData['soc']*(3600.0/signal.timeBase),
 								   devData['capacity']*(3600.0/signal.timeBase),
 								   cons,
-								   devData['producingPowers'], 0, 0,
+								   powers, 0, 0, #devData['producingPowers'], 0, 0,
 								   lowerLimits, upperLimits,
 								   self.useReactiveControl,
 								   prices,
@@ -261,7 +284,7 @@ class ThermalBufConvCtrl(ThermalDevCtrl):
 								   devData['soc']*(3600.0/signal.timeBase),
 								   devData['capacity']*(3600.0/signal.timeBase),
 								   cons,
-								   [], devData['producingPowers'][0], devData['producingPowers'][-1],
+								   [],powers[0], powers[1], #0, 4500, #devData['producingPowers'][0], devData['producingPowers'][-1],
 								   lowerLimits, upperLimits,
 								   self.useReactiveControl,
 								   prices,
@@ -274,6 +297,7 @@ class ThermalBufConvCtrl(ThermalDevCtrl):
 				profileResult[c] = [math.copysign(x/devData['cop'][c], devData['cop'][c]) for x in p]
 			else:
 				profileResult[c] = list(p)
+
 
 		# calculate the improvement
 		improvement = 0.0

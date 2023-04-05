@@ -49,7 +49,7 @@ class ZoneDev2R2C(ThermalDevice):
 		self.cZone = 21100 * 3600	# J/K
 
 		# Heating capacity
-		self.maxHeat = 7500 # Zone can take maximum of 20000W worth of heat
+		self.maxHeat = 7500 # Zone can take maximum of 7500W worth of heat
 		self.minHeat = -7500 # Zone minumum heat (or cooling) in W
 		self.valveHeat = 0 # The valve opening
 
@@ -157,6 +157,9 @@ class ZoneDev2R2C(ThermalDevice):
 		# Update the temperature at the end of the preTick
 		self.temperature = newTemperature
 		self.floorTemperature = newFloorTemperature
+
+		# Now set the state of the supply to 0 such that heating devices can add heat and/or cooling:
+		self.heatSupply[self.commodities[0]] = 0.0
 
 		self.lockState.release()
 

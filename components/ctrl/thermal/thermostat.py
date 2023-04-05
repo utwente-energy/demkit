@@ -142,7 +142,7 @@ class Thermostat(ThermalDevCtrl):
 			if self.heatDemand > 0.001:
 				self.heatDemand = self.dev.maxHeat
 			elif self.heatDemand < -0.001:
-				self.heatDemand = self.dev.minxHeat
+				self.heatDemand = self.dev.minHeat
 
 		self.dev.valveHeat = self.heatDemand
 

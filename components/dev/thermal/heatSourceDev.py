@@ -139,7 +139,7 @@ class HeatSourceDev(ThermalDevice):
 			producedTemperatureZone['HEAT'] = self.producingTemperatures[-1]
 
 			# Heating has priority over cooling
-			if heatDemand > 0.1:
+			if heatDemand > 0.1 and self.producingPowers[-1] > 0.1:
 				valves = self.zGet(self.zones, 'valveHeat')
 
 				# Calculate the maximum
@@ -161,17 +161,17 @@ class HeatSourceDev(ThermalDevice):
 					# Internal bookkeeping
 					consumption -= producedPowerZone['HEAT']
 
-			if coolDemand < -0.1 and (heatDemand <= 0.1 or self.mixHeatCooling):
+			elif coolDemand < -0.1 and self.producingPowers[0] < -0.1 and (heatDemand <= 0.1 or self.mixHeatCooling):
 				valves = self.zGet(self.zones, 'valveHeat')
 
 				# Calculate the maximum
 				totalRequest = 0
 				for zone in self.zones:
-					if valves[zone] > 0:
+					if valves[zone] < -0.001:
 						totalRequest += valves[zone]
 
 				for zone in self.zones:
-					if valves[zone] > 0:
+					if valves[zone] < -0.001:
 						producedPowerZone['HEAT'] = abs(coolDemand / float(totalRequest)) * valves[zone]
 					else:
 						producedPowerZone['HEAT'] = 0.0
@@ -181,13 +181,15 @@ class HeatSourceDev(ThermalDevice):
 					self.zSet(zone, 'heatTemperature', producedTemperatureZone)
 
 					# Internal bookkeeping
-					consumption -= producedPowerZone['HEAT']
+					consumption = producedPowerZone['HEAT']
 
-			if coolDemand >= -0.1 and heatDemand <= 0.1:
-				# Turn everything off
-				producedPowerZone['HEAT'] = 0.0
-				self.zSet(self.zones, 'heatSupply', producedPowerZone)
-				self.zSet(self.zones, 'heatTemperature', producedTemperatureZone)
+			# FIXME: Resolved in the thermal model instead!
+			if False:
+				if coolDemand >= -0.1 and heatDemand <= 0.1:
+					# Turn everything off
+					producedPowerZone['HEAT'] = 0.0
+					self.zSet(self.zones, 'heatSupply', producedPowerZone)
+					self.zSet(self.zones, 'heatTemperature', producedTemperatureZone)
 
 			return consumption
 

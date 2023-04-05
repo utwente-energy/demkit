@@ -78,7 +78,6 @@ class ThermalBufConvDev(HeatSourceDev, BufConvDev):
 		self.lockState.acquire()
 		producingPowers = list(self.producingPowers)
 
-		# FIXME: For now we assume only heat storage. See T190
 		if self.smartOperation and not self.strictComfort and 'HEAT' in self.plan and len(self.plan['HEAT']) > 0:
 			# If we have a planning without strict comfort, we follow the plan to produce energy
 			producingPowers[0] = min(0, self.plan['HEAT'][0][1].real)
@@ -125,12 +124,16 @@ class ThermalBufConvDev(HeatSourceDev, BufConvDev):
 					if self.heatProduction == 0:
 						self.heatProduction = self.producingPowers[-1]
 
-
 		# buffer underrun / overflow check and make the device fix this!
 		if (self.soc + (self.heatProduction + self.consumption['HEAT']) * (self.host.timeBase / 3600.0)) > self.capacity:
 			#We have a buffer overflow, we need to produce less
 			overflow = abs( ( self.soc + (self.heatProduction + self.consumption['HEAT']) * (self.host.timeBase / 3600.0)) - self.capacity) / (self.host.timeBase / 3600.0)
-			self.heatProduction = min(self.producingPowers[-1], max(self.heatProduction - overflow, self.producingPowers[0]))
+
+			# Detect whether we have a heating or cooling device (requires inversion):
+			if self.producingPowers[-1] > 0:
+				self.heatProduction = min(self.producingPowers[-1], max(self.heatProduction - overflow, self.producingPowers[0]))
+			else:
+				self.heatProduction = min(self.producingPowers[0], max(self.heatProduction - overflow, self.producingPowers[-1]))
 
 			if self.controller is not None:
 				self.lockState.release()
@@ -142,7 +145,12 @@ class ThermalBufConvDev(HeatSourceDev, BufConvDev):
 			underflow = 0.0
 			if self.strictComfort:
 				underflow = abs(self.soc + (self.heatProduction + self.consumption['HEAT']) * (self.host.timeBase / 3600.0) ) / (self.host.timeBase / 3600.0)
-			self.heatProduction = min(self.producingPowers[-1], max(self.heatProduction + underflow, self.producingPowers[0]))
+
+			# Detect whether we have a heating or cooling device (requires inversion):
+			if self.producingPowers[-1] > 0:
+				self.heatProduction = min(self.producingPowers[-1], max(self.heatProduction + underflow, self.producingPowers[0]))
+			else:
+				self.heatProduction = min(self.producingPowers[0], max(self.heatProduction + underflow, self.producingPowers[-1]))
 
 			if self.controller is not None:
 				self.lockState.release()

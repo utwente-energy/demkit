@@ -152,6 +152,9 @@ class ZoneDev1R1C(ThermalDevice):
 		# Update the temperature at the end of the preTick
 		self.temperature = newTemperature
 
+		# Now set the state of the supply to 0 such that heating devices can add heat and/or cooling:
+		self.heatSupply[self.commodities[0]] = 0.0
+
 		self.lockState.release()
 
 
