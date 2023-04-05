@@ -3,11 +3,11 @@ mkdir workspace
 cd workspace
 git clone git@github.com:utwente-energy/demkit-example.git example
 cd example
-git checkout master
+git checkout main
 cd ..
 cd ..
 cd demkit
-git checkout master
+git checkout main
 docker network create demkit_network
 cd services
 cd docker
