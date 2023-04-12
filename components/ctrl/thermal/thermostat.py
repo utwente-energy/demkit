@@ -110,7 +110,7 @@ class Thermostat(ThermalDevCtrl):
 		if self.currentJobIdx+1 < len(self.jobs):
 			j = self.jobs[self.currentJobIdx+1][1]
 			if j['startTime']-self.preheatingTime <= self.host.time() and j['setpoint'] > self.temperatureMin: # Setpoint above idletemp, preheat/precool
-				self.temperatureSetpointHeating = j['setpoint'] + self.temperatureDeadband[0]
+				self.temperatureSetpointHeating = j['setpoint']
 				self.temperatureSetpointCooling = max(j['setpoint'], self.temperatureMax)
 				self.setpointChanged = True
 				self.currentJobIdx += 1
