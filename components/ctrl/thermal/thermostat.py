@@ -242,7 +242,7 @@ class Thermostat(ThermalDevCtrl):
 			while time < endTime and idx-1 < len(self.jobs):
 				j = self.jobs[idx+1][1]
 				if j['startTime']-self.preheatingTime <= time and j['setpoint'] > self.temperatureMin: # Setpoint above idletemp, preheat/precool
-					setpoint= j['setpoint']
+					setpoint = max(j['setpoint'], self.temperatureMax)
 					idx += 1
 				elif j['startTime'] <= time:
 					setpoint = self.temperatureMax

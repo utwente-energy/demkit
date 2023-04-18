@@ -311,6 +311,8 @@ class ZoneDev2R2C(ThermalDevice):
 		floorTemperature = self.floorTemperature # Fetch current state
 		zoneTemperature = self.temperature		 # Fetch current state
 
+		print(upperSetpoints)
+
 		# Simulate the zone
 		for i in range(0, len(gains)):
 			# Update the gain to include ventilation
