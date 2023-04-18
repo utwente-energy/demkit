@@ -99,19 +99,19 @@ class MeterDev(LoadDev):
 	def logStats(self, time):
 		self.lockState.acquire()
 		for c in self.commodities:
-			self.logValue('W-power.real.c.'+c,self.consumption[c].real)
+			self.logValue('W-power.real.c.'+c, self.consumption[c].real)
 			self.logValue('Wh-energy.c.'+c, self.consumption[c].real / (3600.0 / self.timeBase))
 			if self.host.extendedLogging:
 				self.logValue("W-power.imag.c."+c, self.consumption[c].imag)
 
 		if self.host.extendedLogging:
 			self.logValue("W-power-imported", self.imported.real) # Smart meter readings
-			self.logValue("W-power-exported", self.exported)
+			self.logValue("W-power-exported", self.exported.real)
 			self.logValue("W-power-self-consumed", self.selfConsumption.real)
 
-			self.logValue("Wh-energy-imported", self.imported / (3600.0 / self.timeBase)) # Smart meter readings
-			self.logValue("Wh-energy-exported", self.exported / (3600.0 / self.timeBase))
-			self.logValue("Wh-energy-self-consumed", self.selfConsumption / (3600.0 / self.timeBase))
+			self.logValue("Wh-energy-imported", self.imported.real / (3600.0 / self.timeBase))
+			self.logValue("Wh-energy-exported", self.exported.real / (3600.0 / self.timeBase))
+			self.logValue("Wh-energy-self-consumed", self.selfConsumption.real / (3600.0 / self.timeBase))
 
 			# self.logValue("M-costs-cumulative", self.costs + self.costsConnectionInterval)
 
@@ -164,6 +164,11 @@ class MeterDev(LoadDev):
 			# Also, since there is a change, we should execute a new load-flow simulation:
 			if self.flowNode is not None:
 				self.zCall(self.flowNode, "registerTicket", deltatime+1, 'simulate') # FIXME: Would be nicer to request a new loadflow through a specific function that is more descriptive
+
+		# Resetting the counters
+		self.imported = 0.0
+		self.exported = 0.0
+		self.selfConsumption = 0.0
 
 		for c in self.commodities:
 			self.consumption[c] = total[c]
