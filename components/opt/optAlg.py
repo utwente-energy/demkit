@@ -276,8 +276,8 @@ class OptAlg:
 		upperLevels = list(result)
 		if prices is []:
 			for i in range(0, len(desired)):
-				lowerLevels[i] = -desired[i]
-				upperLevels[i] = -desired[i] + powerLimits[i]
+				lowerLevels[i] = -desired[i].real
+				upperLevels[i] = -desired[i].real + powerLimits[i].real
 
 		else:
 			if beta == 1:
@@ -288,9 +288,9 @@ class OptAlg:
 			for i in range(0, len(desired)):
 				# FIXME ADDED FOR BETA!
 				# double u = signal->steeringSignal.at(i)/(2*signal->beta) - signal->desiredProfile.at(i);
-				lvl = (prices[i] / (2 * beta)) - desired[i]
+				lvl = (prices[i].real / (2 * beta)) - desired[i].real
 				lowerLevels[i] = lvl
-				upperLevels[i] = lvl + powerLimits[i]
+				upperLevels[i] = lvl + powerLimits[i].real
 
 		sortedLowerLevels = list(lowerLevels)
 		sortedUpperLevels = list(upperLevels)
