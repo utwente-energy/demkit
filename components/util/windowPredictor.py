@@ -23,8 +23,8 @@ class WindowPredictor():
 		assert(timeWindow % timeBase == 0) # Ensure alignement
 
 		# What historical samples to take?
-		self.weights = {-604800*60 	: 0.75,  \
-						-86400*60 	: 0.25}
+		self.weights = {-604800 : 0.75,  \
+						-86400	: 0.25}
 
 		self.historyFactor = 0.5 # How much to keep of the previous sample
 
