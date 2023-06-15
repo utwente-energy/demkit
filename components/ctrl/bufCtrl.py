@@ -253,16 +253,16 @@ class BufCtrl(DevCtrl):
 						p[i] = p[i].real/chargingEfficiency[idx]
 					except:
 						# Not an exact value in the list, we need to interpolate
-						idx = 0
-						while idx < len(internalPowers) and internalPowers[idx] <= p[i].real+0.0001:
+						idx = 1
+						while idx < len(internalPowers) and internalPowers[idx+1] <= p[i].real+0.0001:
 							idx +=  1
 						eff = 1
 						if idx >= len(internalPowers)-1:
 							eff = chargingEfficiency[-1] # Reached the end of the list, take the last value
 						else:
-							d = (p[i].real - internalPowers[idx].real) / (internalPowers[idx+1].real - internalPowers[idx].real)
+							d = (p[i].real - internalPowers[idx-1].real) / (internalPowers[idx].real - internalPowers[idx-1].real)
 							assert(d <= 1.0001)
-							eff = (d * chargingEfficiency[idx]) + ((1-d) * chargingEfficiency[idx+1])
+							eff = (d * chargingEfficiency[idx-1]) + ((1-d) * chargingEfficiency[idx])
 						p[i] = p[i].real / eff
 
 		else:
