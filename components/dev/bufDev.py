@@ -458,16 +458,16 @@ class BufDev(Device):
 			result = cons.real*self.chargingEfficiency[idx]
 		except:
 			# Not an exact value in the list
-			idx = 0
-			while idx < len(self.chargingPowers) and self.chargingPowers[idx] < cons.real:
+			idx = 1
+			while idx < len(self.chargingPowers) and self.chargingPowers[idx+1] < cons.real:
 				idx += 1
 
 			eff = 1
 			if idx >= len(self.chargingPowers)-1:
 				eff = self.chargingEfficiency[-1]
 			else:
-				d = (cons.real - self.chargingPowers[idx].real) / (self.chargingPowers[idx+1].real - self.chargingPowers[idx].real)
-				eff = (d * self.chargingEfficiency[idx]) + ((1-d) * self.chargingEfficiency[idx+1])
+				d = (cons.real - self.chargingPowers[idx-1].real) / (self.chargingPowers[idx].real - self.chargingPowers[idx-1].real)
+				eff = (d * self.chargingEfficiency[idx-1]) + ((1-d) * self.chargingEfficiency[idx])
 			result = cons * eff
 
 		return result
@@ -484,16 +484,16 @@ class BufDev(Device):
 		except:
 			# Not an exact value in the list
 			x = self.chargingPowers[0]
-			idx = 0
-			while idx < len(self.internalPowers) and self.internalPowers[idx] < charge.real:
+			idx = 1
+			while idx < len(self.internalPowers) and self.internalPowers[idx+1] < charge.real:
 				idx += 1
 
 			eff = 1
 			if idx >= len(self.internalPowers)-1:
 				eff = self.chargingEfficiency[-1]
 			else:
-				d = (charge.real - self.internalPowers[idx].real) / (self.internalPowers[idx+1].real - self.internalPowers[idx].real)
-				eff = (d * self.chargingEfficiency[idx]) + ((1-d) * self.chargingEfficiency[idx+1])
+				d = (charge.real - self.internalPowers[idx-1].real) / (self.internalPowers[idx].real - self.internalPowers[idx-1].real)
+				eff = (d * self.chargingEfficiency[idx-1]) + ((1-d) * self.chargingEfficiency[idx])
 			result = charge / eff
 
 		return result
