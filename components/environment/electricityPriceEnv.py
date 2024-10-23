@@ -26,7 +26,7 @@ class ElectricityPriceEnv(EnvEntity):
 		self.timeBase = 3600 # Default of most weather information sources
 
 		#  Readable values:
-		self.price = 0.0 			# €/kWh excluding tax
+		self.price = 0.08			# €/kWh excluding tax
 		self.priceVAT = 0.0			# €/kWh including tax
 
 
@@ -36,20 +36,21 @@ class ElectricityPriceEnv(EnvEntity):
 		
 
 		# Separate readers for each weather column
-		self.pricereaderReader = None
+		self.priceReader = None
 		self.priceColumn = 0
 
 		# Input files
-		self.priceFile = None
+		self.priceFile = None			# File for dynamic prices, leave empty to have a static price
 		self.priceTimeBase = 3600		# Seconds per interval. Default 1 hour for KNMI weather data
 
-		self.timeOffset = 
+		self.timeOffset = 0
 		if host != None:
 			self.timeOffset = host.timeOffset 
 
 	def startup(self):
 		#initialize the readers
-		self.priceReader = CsvReader(self.priceFile, self.priceTimeBase, self.priceColumn, self.timeOffset)
+		if self.priceFile is not None:
+			self.priceReader = CsvReader(self.priceFile, self.priceTimeBase, self.priceColumn, self.timeOffset)
 		
 		# Initialize the values
 		self.preTick(self.host.time())
@@ -58,8 +59,9 @@ class ElectricityPriceEnv(EnvEntity):
 
 	def preTick(self, time, deltatime=0):
 		self.lockState.acquire()
-		self.price = self.priceReader.readValue(time)
-		self.priceVAT = (self.price + self.taxEnergy + self.handlingFee) * self.self.priceVAT
+		if self.priceReader is not None:
+			self.price = self.priceReader.readValue(time)
+		self.priceVAT = (self.price + self.taxEnergy + self.handlingFee) * self.taxVAT
 
 		self.lockState.release()
 		# Only temperature supported for now. Additional readers make it possible to get other data in if required
@@ -88,8 +90,11 @@ class ElectricityPriceEnv(EnvEntity):
 
 	def dopricePrediction(self, startTime, endTime = None, timeBase = 60, perfect = False):
 		if endTime is None:
-			prices = self.priceReader.readValue(startTime)
-			return prices
+			if self.priceReader is not None:
+				prices = self.priceReader.readValue(startTime)
+				return prices
+			else:
+				return self.price
 
 		else:
 			result = []
