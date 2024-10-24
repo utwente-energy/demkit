@@ -103,6 +103,7 @@ class OdectEnv(Co2Env):
 
 	# FIXME make async
 	def retrieveForecast(self):
+		# NOTE: Here we retrieve data, need to do it a bit different, OWM has two api: now and forecast
 		dataCache = None
 		if self.lastPrediction < self.host.time():
 			try:
@@ -126,10 +127,12 @@ class OdectEnv(Co2Env):
 		return dict(self.predictionCache)
 
 	def doPrediction(self, startTime, endTime, timeBase=None):
+		# Here we process it (we should also store it!)
 		if timeBase is None:
 			timeBase = self.timeBase
 
 		result = []
+		# Note here the data was retrieved
 		data = self.retrieveForecast()
 
 		time = startTime
