@@ -26,7 +26,7 @@ from util.influxdbReader import InfluxDBReader
 # NOTE: This class is also suitable as a electricity price class
 class OdectEnv(Co2Env):
 	def __init__(self,  name,  host):
-		WeatherEnv.__init__(self,  name, host)
+		Co2Env.__init__(self,  name, host)
 
 		self.timeBase = 60
 
@@ -64,16 +64,12 @@ class OdectEnv(Co2Env):
 
 		self.supportsForecast = True
 
-		self.reader = None
-
 		# Mapping of variables to names in InfluxDB. Should become the standard for new classes to access data from InfluxDB easily
 		self.varMapping = {
 			"gCO2eq_per_kWh-emissions.c.ELECTRICITY": "co2emissions",
 		}
 
 	def startup(self):
-		self.initializeReaders()
-
 		# Initialize the values
 		self.retrieveData()
 		self.preTick(self.host.time())
@@ -93,8 +89,8 @@ class OdectEnv(Co2Env):
 		self.lockState.release()
 
 		self.logValue("gCO2eq_per_kWh-emissions.c.ELECTRICITY", self.co2Real, self.co2RealTime)
-		self.logValue("EUR_per_kWh-price.c.ELECTRICITY", self.price, dt)
-		self.logValue("EUR_per_kWh-price_with_VAT.c.ELECTRICITY", self.priceVAT, dt)
+		self.logValue("EUR_per_kWh-price.c.ELECTRICITY", self.price, self.co2EstimateTime)
+		self.logValue("EUR_per_kWh-price_with_VAT.c.ELECTRICITY", self.priceVAT, self.co2EstimateTime)
 
 
 
@@ -135,10 +131,10 @@ class OdectEnv(Co2Env):
 				self.lockState.acquire()
 				self.predictionCache = dataCache
 
-				self.price = dataCachedata['values'][0][1]
+				self.price = dataCache[0][1]
 				self.priceVAT = (self.price + self.taxEnergy + self.handlingFee) * self.taxVAT
-				self.co2Estimate = dataCachedata['values'][0][2]
-				self.co2EstimateTime = int(dateutil.parser.parse(dataCachedata['values'][0][0]).timestamp())
+				self.co2Estimate = dataCache[0][2]
+				self.co2EstimateTime = int(dateutil.parser.parse(dataCache[0][0]).timestamp())
 
 				self.lastUpdate = self.host.time()
 				self.lockState.release()
@@ -151,7 +147,7 @@ class OdectEnv(Co2Env):
 		# Perform forward logging
 		self.logForward()
 
-		return dict(self.predictionCache)
+		return copy.deepcopy(self.predictionCache)
 
 
 	def doPrediction(self, startTime, endTime, timeBase=None):
@@ -187,6 +183,7 @@ class OdectEnv(Co2Env):
 		return result
 
 	def logForward(self):
+		# This could be made more elegant using the doPrediction though....
 		self.lockState.acquire()
 		data = copy.deepcopy(self.predictionCache)
 		self.lockState.release()
@@ -194,10 +191,10 @@ class OdectEnv(Co2Env):
 		try:
 			for element in data:
 				dt = int(dateutil.parser.parse(element[0]).timestamp())
-				priceVAT = (element['price'] + self.taxEnergy + self.handlingFee) * self.taxVAT
+				priceVAT = (element[1] + self.taxEnergy + self.handlingFee) * self.taxVAT
 
-				self.logValue("gCO2eq_per_kWh-emissions.forecast.c.ELECTRICITY", element['co2'], dt)
-				self.logValue("EUR_per_kWh-price.c.ELECTRICITY", element['price'], dt)
+				self.logValue("gCO2eq_per_kWh-emissions.forecast.c.ELECTRICITY", element[2], dt)
+				self.logValue("EUR_per_kWh-price.c.ELECTRICITY", element[1], dt)
 				self.logValue("EUR_per_kWh-price_with_VAT.c.ELECTRICITY", priceVAT, dt)
 		except:
 			self.logWarning("Error in the forward logging of ODECT forecasts")
