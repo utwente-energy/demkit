@@ -92,7 +92,22 @@ class OdectEnv(Co2Env):
 		self.logValue("EUR_per_kWh-price.c.ELECTRICITY", self.price, self.co2EstimateTime)
 		self.logValue("EUR_per_kWh-price_with_VAT.c.ELECTRICITY", self.priceVAT, self.co2EstimateTime)
 
+	def logForward(self):
+		# This could be made more elegant using the doPrediction though....
+		self.lockState.acquire()
+		data = copy.deepcopy(self.predictionCache)
+		self.lockState.release()
 
+		try:
+			for element in data:
+				dt = int(dateutil.parser.parse(element[0]).timestamp())
+				priceVAT = (element[1] + self.taxEnergy + self.handlingFee) * self.taxVAT
+
+				self.logValue("gCO2eq_per_kWh-emissions.forecast.c.ELECTRICITY", element[2], dt)
+				self.logValue("EUR_per_kWh-price.c.ELECTRICITY", element[1], dt)
+				self.logValue("EUR_per_kWh-price_with_VAT.c.ELECTRICITY", priceVAT, dt)
+		except:
+			self.logWarning("Error in the forward logging of ODECT forecasts")
 
 #### HELPER FUNCTIONS
 	def retrieveData(self):
@@ -181,23 +196,6 @@ class OdectEnv(Co2Env):
 			result = []
 			
 		return result
-
-	def logForward(self):
-		# This could be made more elegant using the doPrediction though....
-		self.lockState.acquire()
-		data = copy.deepcopy(self.predictionCache)
-		self.lockState.release()
-
-		try:
-			for element in data:
-				dt = int(dateutil.parser.parse(element[0]).timestamp())
-				priceVAT = (element[1] + self.taxEnergy + self.handlingFee) * self.taxVAT
-
-				self.logValue("gCO2eq_per_kWh-emissions.forecast.c.ELECTRICITY", element[2], dt)
-				self.logValue("EUR_per_kWh-price.c.ELECTRICITY", element[1], dt)
-				self.logValue("EUR_per_kWh-price_with_VAT.c.ELECTRICITY", priceVAT, dt)
-		except:
-			self.logWarning("Error in the forward logging of ODECT forecasts")
 
 
 	def doCo2Prediction(self, startTime, endTime=None, timeBase=60, perfect=False):
