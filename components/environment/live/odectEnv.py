@@ -17,9 +17,13 @@ from environment.co2Env import Co2Env
 
 import requests
 import threading
+import copy
+import datetime
+import dateutil.parser
 
 from util.influxdbReader import InfluxDBReader
 
+# NOTE: This class is also suitable as a electricity price class
 class OdectEnv(Co2Env):
 	def __init__(self,  name,  host):
 		WeatherEnv.__init__(self,  name, host)
@@ -33,9 +37,23 @@ class OdectEnv(Co2Env):
 		# ODECT URL
 		self.odecturl = ""
 
-		self.co2emissionsReal = 	0.0 # gCO2eq/kWh - Real value (2 hours behind)
-		self.co2emissionsEstimate = 0.0 # gCO2eq/kWh - Estimate (current moment)
+		self.co2Real =    0.0 	# gCO2eq/kWh - Real value (2 hours behind)
+		self.co2RealTime = -1	# Timestamp of this datapoint
+
+		self.co2Estimate = 0.0 	# gCO2eq/kWh - Estimate (current moment)
+		self.co2EstimateTime = -1  # Timestamp of this datapoint
+
 		# Note: This class will use the estimate to set the current variable
+
+		# This class also provides prices
+		self.price = 0.08  # €/kWh excluding tax
+		self.priceVAT = 0.0  # €/kWh including tax
+
+		self.taxEnergy = 0.1088  # Dutch Energy tax (Energiebelasting in Netherlands)
+		self.handlingFee = 0.02  # Handling fee of dynamic contracts (default ZonnePlan energy supplier)
+		self.taxVAT = 1.21  # VAT multiplier (Netherlands)
+
+
 
 		self.lastUpdate = -1
 		self.updateInterval = 900 # No need to update faster
@@ -50,7 +68,7 @@ class OdectEnv(Co2Env):
 
 		# Mapping of variables to names in InfluxDB. Should become the standard for new classes to access data from InfluxDB easily
 		self.varMapping = {
-			"gCO2eq_per_kWh-emissions.c.ELECTRICITY": "co2emissions"
+			"gCO2eq_per_kWh-emissions.c.ELECTRICITY": "co2emissions",
 		}
 
 	def startup(self):
@@ -66,65 +84,75 @@ class OdectEnv(Co2Env):
 	def preTick(self, time, deltatime=0):
 		if (self.host.time() - self.lastUpdate) > self.updateInterval and not self.retrieving:
 			self.retrieving = True
-			self.runInThread('retrieveData') 
+			self.runInThread('retrieveData')
+
+	def logStats(self, time):
+		# Perform some logging
+		self.lockState.acquire()
+		data = copy.deepcopy(self.predictionCache)
+		self.lockState.release()
+
+		self.logValue("gCO2eq_per_kWh-emissions.c.ELECTRICITY", self.co2Real, self.co2RealTime)
+		self.logValue("EUR_per_kWh-price.c.ELECTRICITY", self.price, dt)
+		self.logValue("EUR_per_kWh-price_with_VAT.c.ELECTRICITY", self.priceVAT, dt)
+
 
 
 #### HELPER FUNCTIONS
 	def retrieveData(self):
-		# We should not be a bad citizen to the service
-
+		# Here we will retrieve the  data from the API
 		if (self.host.time() - self.lastUpdate)  > self.updateInterval:
 			try:
+				# First we obtain the lastmix data
+				r = requests.get(self.odecturl + "/lastmix", auth=(self.username, self.password))
+				if r.status_code != 200:
+					self.logWarning("Could not connect to ODECT. Errorcode: " + str(r.status_code) + "\t\t" + r.text)
+					self.retrieving = False
+					return
+
+				# Update the current state
+				data = r.json()
+
+				self.lockState.acquire()
+				self.co2Real = data[0]['values'][0][1]
+				self.co2RealTime = int(dateutil.parser.parse(data[0]['values'][0][0]).timestamp())
+				self.lockState.release()
+
+			except:
+				self.logWarning("ODECT service error")
+
+			try:
+				dataCache = None
+				# Then we retrieve and handle the forecasts
 				r = requests.get(self.odecturl+"/forecast", auth=(self.username, self.password))
 				if r.status_code != 200:
 					self.logWarning("Could not connect to ODECT. Errorcode: "+str(r.status_code)+ "\t\t" + r.text)
 					self.retrieving = False
 					return
 
-				data = r.json()
+				dataCache = r.json()['values']
 
 				self.lockState.acquire()
-				self.temperature = data['main']['temp']
-				self.humidity = data['main']['humidity']
-				self.pressure = data['main']['pressure']
-				self.windspeed = data['wind']['speed']
-				if 'deg' in data['wind']:
-					self.winddirection = data['wind']['deg']
+				self.predictionCache = dataCache
 
-				# If all succeeded:
+				self.price = dataCachedata['values'][0][1]
+				self.priceVAT = (self.price + self.taxEnergy + self.handlingFee) * self.taxVAT
+				self.co2Estimate = dataCachedata['values'][0][2]
+				self.co2EstimateTime = int(dateutil.parser.parse(dataCachedata['values'][0][0]).timestamp())
+
 				self.lastUpdate = self.host.time()
-				self.retrieving = False
 				self.lockState.release()
+
 			except:
-				self.logWarning("OpenWeatherMap service error")
+				self.logWarning("ODECT service error")
 
 		self.retrieving = False
 
+		# Perform forward logging
+		self.logForward()
 
-	# FIXME make async
-	def retrieveForecast(self):
-		# NOTE: Here we retrieve data, need to do it a bit different, OWM has two api: now and forecast
-		dataCache = None
-		if self.lastPrediction < self.host.time():
-			try:
-				url = "http://api.openweathermap.org/data/2.5/forecast?lat="+str(self.latitude)+"&lon="+str(self.longitude)+"&units=metric&APPID="+self.apiKey
-				r = requests.get(url)
-				if r.status_code != 200:
-					self.logWarning("Could not connect to OpenWeatherMap. Errorcode: "+str(r.status_code)+ "\t\t" + r.text)
-					return
-
-				dataCache = r.json()
-			except:
-				self.logWarning("OpenWeatherMap service error")
-				return dict(self.predictionCache)
-
-		if dataCache is not None:
-			self.lockState.acquire()
-			self.predictionCache = dataCache
-			self.lastUpdate = self.host.time()
-			self.lockState.release()
-			
 		return dict(self.predictionCache)
+
 
 	def doPrediction(self, startTime, endTime, timeBase=None):
 		# Here we process it (we should also store it!)
@@ -133,24 +161,21 @@ class OdectEnv(Co2Env):
 
 		result = []
 		# Note here the data was retrieved
-		data = self.retrieveForecast()
+		self.lockState.acquire()
+		data = copy.deepcopy(self.predictionCache)
+		self.lockState.release()
 
 		time = startTime
 		try:
 			while time < endTime:
 				# Retrieve the correct value:
-				for element in data['list']:
-					if element['dt'] <= time and element['dt']+10800 > time: # 10800 seconds = 3 hours, the interval length of openweathermap
+				for element in data:
+					dt = int(dateutil.parser.parse(element[0]).timestamp())
+					if dt <= time and dt+3600 > time: # 10800 seconds = 3 hours, the interval length of openweathermap
 						d = {}
-						d['temperature'] = element['main']['temp']
-						d['humidity'] = element['main']['humidity']
-						d['pressure'] = element['main']['pressure']
-						d['windspeed'] = element['wind']['speed']
-						if 'deg' in element['wind']:
-							d['winddirection'] = element['wind']['deg']
-						else:
-							d['winddirection'] = 0
-						d['time'] = element['dt']
+						d['co2'] = element[2]
+						d['price'] = element[1]
+						d['time'] = time
 
 						result.append(dict(d))
 						break
@@ -161,21 +186,51 @@ class OdectEnv(Co2Env):
 			
 		return result
 
-	def doTemperaturePrediction(self, startTime, endTime = None, timeBase = 60, perfect = False):
-		# FIXME IMPLEMENT
+	def logForward(self):
+		self.lockState.acquire()
+		data = copy.deepcopy(self.predictionCache)
+		self.lockState.release()
 
+		try:
+			for element in data:
+				dt = int(dateutil.parser.parse(element[0]).timestamp())
+				priceVAT = (element['price'] + self.taxEnergy + self.handlingFee) * self.taxVAT
+
+				self.logValue("gCO2eq_per_kWh-emissions.forecast.c.ELECTRICITY", element['co2'], dt)
+				self.logValue("EUR_per_kWh-price.c.ELECTRICITY", element['price'], dt)
+				self.logValue("EUR_per_kWh-price_with_VAT.c.ELECTRICITY", priceVAT, dt)
+		except:
+			self.logWarning("Error in the forward logging of ODECT forecasts")
+
+
+	def doCo2Prediction(self, startTime, endTime=None, timeBase=60, perfect=False):
 		if endTime is None:
-			temperature = self.temperatureReader.readValue(startTime)
-			if perfect is False:
-				temperature = temperature -0.5 + random.random() # Just some randomization. Would be nice to retrieve a prediction dataset in the future, T194
-			return temperature
+			co2emissions = self.doPrediction(startTime)[0]['co2']
+			return co2emissions
 
 		else:
 			result = []
 			time = startTime
+			# This is horribly inefficient though, but I do not wanna break the system
 			while time < endTime:
 				# Recursive call to itself
-				result.append(self.doTemperaturePrediction(time, None, timeBase, perfect))
+				result.append(self.doCo2Prediction(time, None, timeBase, perfect))
+				time += timeBase
+
+			return result
+
+	def doPricePrediction(self, startTime, endTime=None, timeBase=60, perfect=False):
+		if endTime is None:
+			price = self.doPrediction(startTime)[0]['price']
+			return price
+
+		else:
+			result = []
+			time = startTime
+			# This is horribly inefficient though, but I do not wanna break the system
+			while time < endTime:
+				# Recursive call to itself
+				result.append(self.doPricePrediction(time, None, timeBase, perfect))
 				time += timeBase
 
 			return result

@@ -150,7 +150,7 @@ class Host(Core):
 		#self.logCsvLine('stats/sim/time', self.name+";"+str(time.time() - self.executionTime) )
 
 		# Do a hard exit
-		exit()
+		#exit()
 
 	def timeTick(self, time, absolute = True):
 		if absolute:

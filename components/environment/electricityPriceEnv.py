@@ -88,7 +88,7 @@ class ElectricityPriceEnv(EnvEntity):
 
 		return r
 
-	def dopricePrediction(self, startTime, endTime = None, timeBase = 60, perfect = False):
+	def doPricePrediction(self, startTime, endTime = None, timeBase = 60, perfect = False):
 		if endTime is None:
 			if self.priceReader is not None:
 				prices = self.priceReader.readValue(startTime)
