@@ -1,4 +1,4 @@
-# Copyright 2023 University of Twente
+# Copyright 2025 University of Twente
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -123,6 +123,9 @@ class SereneBoilerDev(Device):
 		Device.startup(self)
 
 	def preTick(self, time, deltatime=0):
+		# FIXME:
+		# I think we also need to add something here to dynamically add jobs every day to keep this thing running in eternity
+
 		self.prunePlan()
 		assert(len(self.commodities)==1)
 		c = self.commodity
