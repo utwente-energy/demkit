@@ -15,6 +15,9 @@
 
 from dev.device import Device
 
+from util.influxdbReader import InfluxDBReader
+from util.clientCsvReader import ClientCsvReader
+
 import util.helpers
 import math
 
@@ -185,6 +188,7 @@ class SereneBoilerDev(Device):
 
 
 		# From the loaddev
+		# FIXME: This reads the load from Influx/CSV. Needs to be replaced with interface to the actual device
 		for c in self.commodities:	
 			if self.host.timeBase <= self.timeBase:
 				self.consumption[c] = self.readValue(time)
@@ -267,6 +271,7 @@ class SereneBoilerDev(Device):
 
 		# boiler changes
 		try:
+			self.logValue("m3s-flowrate.outlet", self.flowrate)
 			if self.powerSetting:
 				self.logValue("S-powerSetting", 1)
 			else:

@@ -1,0 +1,464 @@
+# Copyright 2023 University of Twente
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+# http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import util.helpers
+from util.windowPredictor import WindowPredictor
+from util.csvReader import CsvReader
+
+from util.clientCsvReader import ClientCsvReader
+
+from ctrl.devCtrl import DevCtrl
+from opt.optAlg import OptAlg
+
+import copy
+import math
+
+
+# TimeShiftable controller
+class SereneBoilerCtrl(DevCtrl):
+	#Make some init function that requires the host to be provided
+	def __init__(self,  name,  dev,  ctrl,  host):
+		DevCtrl.__init__(self,   name,  dev,  ctrl,  host)
+
+		self.devtype = "SereneBoilerController"
+		self.cachedProfile = []
+		
+		self.jobCache = {}
+		self.jobCacheTime = -1
+		
+		self.nextStart = None
+		self.staticDevice = False
+
+		self.history = []
+		self.lastPredictionUpdate = -1
+
+		self.predictor = None
+		self.predictorFlow = None
+
+		self.perfectPredictions = True # Used for the code to plan the boiler operation
+
+		# The following vars are used for power and flow
+		# FIXME: In the end we need to test towards setting both to false and read from InfluxDB
+		self.perfectPredictionsPower = True
+		self.perfectPredictionsFlow = True
+
+		# persistence
+		if self.persistence != None:
+			self.watchlist += ["devData", "devDataUpdate", "predictor", "lastPredictionUpdate", "history", "predictionPlanning", "predictionDeviation"]
+			self.persistence.setWatchlist(self.watchlist)
+
+
+
+	def startup(self):
+		assert(self.useEventControl == False) # Events are currently not supported
+		DevCtrl.startup(self)
+
+		# Initialize predictors the first time
+		if self.lastPredictionUpdate == -1:
+			self.initializePredictors()
+
+		self.timeOffset = self.host.timeOffset
+
+
+	def timeTick(self, time, deltatime=0):
+		self.updateDeviceProperties()
+
+		# This is the function where we simply take and add a sample to the "WindowPredictor" class to update it and later read it.
+		if (self.predictor != None):
+			# FIXME add also flow here
+			try:
+				self.predictor.addSample(self.devData['consumption'][self.devData['commodities'][0]], time)
+				self.predictorFlow.addSample(self.devData['flowrate'], time)
+			except:
+				pass # no data yet
+
+
+		# FIXME: Events are disabled for now		
+		# if self.useEventControl and (self.lastPredictionUpdate+random.randint(self.predictionUpdateInterval[0], self.predictionUpdateInterval[1]) ) <= time and not self.updatingPrediction:
+		# 	self.updatingPrediction = True
+		# 	self.runInThread('updatePrediction')
+
+
+
+
+	def doPlanning(self, signal, requireImprovement = True):
+		# What we essentially do for this boiler is take an normal uncontrollable prediction and overwrite the parts that are time shiftable
+
+		self.lockPlanning.acquire()
+		# Prepare the result dictionary
+		result = {}
+
+		# Update the device status
+		self.updateDeviceProperties()
+
+		#profileResult = self.genZeroes(signal.planHorizon)
+
+		
+		
+		
+		
+		
+		# So initially we take the approach of an uncontrollable device and estimate the power consumption using historical data in the WindowPredictor
+		# Here we thus fill that result vector:
+		assert(self.timeBase >= self.devData['timeBase']) # The other direction is untested and probably broken!
+		assert(self.timeBase % self.devData['timeBase'] == 0) # Again, otherwise things are very likely to break
+
+		time = signal.time
+		timeBase = signal.timeBase
+
+		if self.predictionPlanningTime < time:
+			p = {}
+
+			#Obtain the profile from a prediction. There is no flex to change this anyways
+			for c in self.commodities:
+				p[c] = self.doPredictionPower(time-(time%timeBase),  time-(time%timeBase)+timeBase*len(signal.desired[c]))
+				if len(p[c]) != signal.planHorizon:
+					p[c] = util.helpers.interpolate(p[c], signal.planHorizon)
+
+		
+		profileResult = copy.deepcopy(p) # make a copy to merge the code
+
+
+		
+
+		# Take the intersection of both lists of commodities
+		commodities = list(set.intersection(set(self.commodities), set(signal.commodities)))
+
+		# Prepare the data
+		s = self.preparePlanningData(signal, copy.deepcopy(self.candidatePlanning[self.name]))
+
+		# Obtain the predicted jobs that have to be scheduled
+		if self.jobCacheTime != signal.time:
+			self.jobCache = self.doPrediction(signal.time-(signal.time%signal.timeBase),
+											  signal.time+signal.timeBase*signal.planHorizon)
+			self.jobCacheTime = signal.time
+		jobs = copy.deepcopy(self.jobCache)
+
+
+
+
+
+		# Now plan all jobs
+		# NOTE profileResult is a pointer-style dictionary that is iteratively updated in the process!
+		# NOTE taken :) Thanks historical Gerwin for reminding me of this neat trick ;-)
+		for job in jobs:
+			profileResult = self.doJobPlanning(s, job[0], job[1], profileResult, self.devDataPlanning)
+
+			# For curtailment, adjust the signal limits here for the second partial planning
+			for c in commodities:
+				if c in s.upperLimits:
+					for i in range(0, len(s.upperLimits[c])):
+						s.upperLimits[c][i] -= profileResult[c][i]
+				if c in s.lowerLimits:
+					for i in range(0, len(s.lowerLimits[c])):
+						s.lowerLimits[c][i] -= profileResult[c][i]
+
+		
+
+
+
+		# The following code is required to create a consistent bookkeeping
+		# With event-based control, timeshifters do update the realized profile differently
+		# Plus, event scheduled devices are not replanned if their job spans two planning iterations
+		if self.useEventControl:
+			# boilerctrl change
+			assert(False) # Not supported
+
+			# for c in self.commodities:
+			# 	if c not in self.realized:
+			# 		self.realized[c] = {}
+			# 	for i in range(0,  signal.planHorizon):
+			# 		t = int((signal.time - (signal.time%signal.timeBase)) +i*self.timeBase)
+			# 		if t in self.realized[c]:
+			# 			profileResult[c][i] += self.realized[c][t]
+
+		# For timeshifters, we need to check if a job is still running
+		if 'profile' in self.devData: # This way we can separate between TS and BTS devices
+			if len(self.cachedProfile) == 0:
+				self.cachedProfile = self.zCall(self.dev, 'getProfile', self.timeBase)
+
+			timeBaseRatio = self.timeBase/self.devData['timeBase']
+			if self.devData['available'] and self.devData['jobProgress'] > 0 and self.devData['jobProgress'] < len(self.cachedProfile)*timeBaseRatio:
+				for c in commodities:
+					progress = int(self.devData['jobProgress']/timeBaseRatio)
+					i = 0
+					while progress < len(self.cachedProfile):
+						profileResult[c][i] = self.cachedProfile[progress]
+						i+=1
+						progress+=1
+
+		# calculate the improvement
+		improvement = 0.0
+		boundImprovement = 0.0
+		if requireImprovement:
+			improvement = self.calculateImprovement(signal.desired, copy.deepcopy(self.candidatePlanning[self.name]), profileResult)
+			boundImprovement = self.calculateBoundImprovement(copy.deepcopy(self.candidatePlanning[self.name]), profileResult, signal.upperLimits, signal.lowerLimits, norm=2)
+
+			# print(improvement)
+
+			if signal.allowDiscomfort:
+				improvement = max(improvement, boundImprovement)
+
+			if improvement < 0.0 or boundImprovement < 0.0:
+				improvement = 0.0
+				profileResult = copy.deepcopy(self.candidatePlanning[self.name])
+
+		result['boundImprovement'] = boundImprovement
+		result['improvement'] = max(0.0, improvement)
+		result['profile'] = copy.deepcopy(profileResult)
+
+		# Local bookkeeping
+		self.candidatePlanning[self.name] = copy.deepcopy(result['profile'])
+		self.lockPlanning.release()
+
+		return result
+
+	def doEventPlanning(self, signal):
+		assert(False) # This is not supposed to happen in the current setup
+		# Synchronize the device state:
+		self.lockPlanning.acquire()
+		self.updateDeviceProperties()
+
+		profileResult = self.genZeroes(signal.planHorizon)
+
+		# Plan this job
+		job = self.devData['currentJob']
+		profileResult = self.doJobPlanning(signal, job, 1.0, profileResult)
+
+		# Find the next starttime as it may be useful for end-users :) Quite hacky code tho, should be replaced by the timestamped profile class
+		t = signal.time
+		timeset = False
+		for p in profileResult[self.commodities[0]]:
+			if p.real < 1 and not timeset:
+				t += signal.timeBase
+			else:
+				self.nextStart = t
+				timeset = True
+		
+		#Set the plan
+		self.setPlan(copy.deepcopy(profileResult), signal.time, signal.timeBase)
+
+		self.lockPlanning.release()
+
+		#Send back our profile to the controller
+		self.zCall(self.parent, 'updateRealized', copy.deepcopy(profileResult))
+
+	def doJobPlanning(self, signal, job, weight, profileResult, devData=None):
+		assert(len(self.commodities)==1)
+		self.updateDeviceProperties()
+
+		c = self.commodities[0]
+
+		# Select the right section of the desired profile and limits based on the job times
+		startIdx = max(0, int(math.ceil((job['startTime']-signal.time)/signal.timeBase)))
+		endIdx = max(0,  int(math.floor((job['endTime']-signal.time)/signal.timeBase)))
+
+		# Need to alter the steering signal as this is an iterative process where jobs may overlap
+		# We need to take care of the result generated so far to allow for proper power limits
+		# Important that we add the negative profileResult:
+		s = self.preparePlanningData(signal, profileResult)
+
+		upperLimits = []
+		lowerLimits = []
+		if len(s.upperLimits) > 0:
+			upperLimits = s.upperLimits[c][startIdx:endIdx]
+		if len(s.lowerLimits) > 0:
+			lowerLimits = s.lowerLimits[c][startIdx:endIdx]
+
+		#get and scale the profile of the TS accordingly
+		if len(self.cachedProfile) == 0:
+			self.cachedProfile = self.zCall(self.dev, 'getProfile', self.timeBase)
+
+		devProfile = list(self.cachedProfile)
+		devProfile[:] = [ val*weight for val in devProfile ]
+
+		#call the algorithm
+		opt = OptAlg()
+		p = opt.timeShiftablePlanning(s.desired[c][startIdx:endIdx], devProfile, lowerLimits, upperLimits, s.prices[c][startIdx:endIdx], s.profileWeight)
+
+		#now add the profile to the result vector
+		for i in range(0,  len(p)):
+			profileResult[c][i+startIdx] += p[i]
+
+		return profileResult
+
+	# Overriding endSynchronizedPlanning to handle realized profiles properly
+	def endSynchronizedPlanning(self, signal):
+		self.lockPlanning.acquire()
+		if self.useEventControl:
+			# USed to create a local planning in event based control to fix differences/infeasible schedules that may have emerged in the time since the planning started
+			# This mainly has to do with asynchronous events in demonstration
+			# Get the update device state
+			self.devDataPlanning = copy.deepcopy( self.updateDeviceProperties() )
+
+			# Creating an empty steering signal, this will force the device to stick to its own planning as much as possible
+			d = {}
+			for c in self.commodities:
+				d[c] = [complex(0.0, 0.0)] * signal.planHorizon
+			signal.desired = d
+
+			self.lockPlanning.release()
+			r = self.doPlanning(signal, False)
+			self.lockPlanning.acquire()
+
+			self.planningTimestamp = self.host.time()
+			if self.staticDevice:
+				self.setPlan(r['profile'], signal.time, signal.timeBase)
+
+		# perform forward logging if desired to expose the planning to a user :)
+		if self.forwardLogging and self.host.logControllers:
+			for c in signal.commodities:
+				for i in range(0,  signal.planHorizon):
+					self.logValue("W-power.plan.real.c."+c,  self.plan[c][int(signal.time + i*signal.timeBase)].real, int(signal.time + i*signal.timeBase))
+					if self.host.extendedLogging:
+						self.logValue("W-power.plan.imag.c." + c, self.plan[c][int(signal.time + i*signal.timeBase)].imag, int(signal.time + i * signal.timeBase))
+
+					if self.useEventControl:
+						self.logValue("W-power.realized.imag.c." + c,self.realized[c][int(signal.time + i * signal.timeBase)].imag,int(signal.time + i * signal.timeBase))
+						if self.host.extendedLogging:
+							self.logValue("W-power.realized.real.c." + c,self.realized[c][int(signal.time + i * signal.timeBase)].real,int(signal.time + i * signal.timeBase))
+
+
+
+		# In the meantime we also create a log in Grafana of the forecast of the flow to make this visible
+		time = signal.time
+		flowForecast = self.doPredictionFlow(time-(time%timeBase),  time-(time%timeBase)+timeBase*len(signal.desired[c]))
+		for i in range(0, len(flowForecast)):
+			self.logValue("m3s-flowrate.plan", flowForecast[i], int(signal.time + i * signal.timeBase))
+
+
+
+
+		self.lockPlanning.release()
+		return dict(self.realized)
+
+	def requestCancelation(self):
+		assert(False) # Unimplemented at this moment, placeholder
+
+
+#### PREDICTION FUNCTION
+	def doPrediction(self,  startTime,  endTime):
+		result = []
+
+		# NOTE: Commented as we do not do event based planning
+		# #first check if we need to add a running job:
+		# if not self.useEventControl:
+		# 	#also add the current job if it applies:
+		# 	if self.devDataPlanning['available'] and self.devDataPlanning['jobProgress'] == 0:
+		# 		j = {}
+		# 		j['startTime'] = self.host.time()
+		# 		j['endTime'] = self.devDataPlanning['currentJob']['endTime']
+		# 		d = (j,  1) #add weight
+		# 		result.append(d)
+
+		# NOTE: We do enforce perfect predictions for now, i.e. we specify the on times of the boiler manually
+		if True: #self.perfectPredictions:
+			#Since we use predictions, we may have overlap with already scheduled (realized) jobs
+			#Hence we need to change the start time if a current job is running:
+			if self.devDataPlanning['available']:
+				startTime = self.devDataPlanning['currentJob']['endTime']
+
+
+			for job in self.devDataPlanning['jobs']:
+				if(job[1]['startTime'] >= startTime and job[1]['endTime'] <= endTime):
+					#Need to create a new job for the sake of time in the controller
+					j = {}
+					j['startTime'] = job[1]['startTime']
+					j['endTime'] = job[1]['endTime']
+					d = (j,  1) #add weight
+					result.append(d)
+
+				if(job[1]['startTime'] > endTime):
+					break
+
+		#real predictions
+		# else:
+		# 	#Since we use predictions, we may have overlap with already scheduled (realized) jobs
+		# 	#Hence we need to change the start time if a current job is running:
+		# 	if self.devDataPlanning['available']:
+		# 		startTime = self.devDataPlanning['currentJob']['endTime']
+
+		# 	for job in self.devDataPlanning['jobs']:
+		# 		for week in range(1,  5):
+		# 			w = 0.125
+		# 			if week == 1:
+		# 				w = 0.5
+		# 			if week == 2:
+		# 				w = 0.25
+
+		# 			offset = 3600*24*7*week
+		# 			if(job[1]['startTime'] >= startTime-offset and min(job[1]['endTime'], job[1]['startTime']+24*3600)  < endTime-offset):
+		# 				#Need to create a new job for the sake of time in the controller
+		# 				j = {}
+		# 				j['startTime'] = job[1]['startTime']+offset
+		# 				j['endTime'] = job[1]['endTime']+offset
+		# 				d = (j,  w)
+		# 				result.append(d)
+
+		# 			if(job[1]['startTime'] > endTime-offset):
+		# 				break
+
+		return result
+
+
+
+
+
+	# Here we initialize the predictor
+	def initializePredictors(self):
+		self.updateDeviceProperties()
+		self.lastPredictionUpdate = self.host.time()
+
+		if self.perfectPredictionsPower:
+			pass
+		else:
+			# Power
+			self.predictor = WindowPredictor(self.timeBase)
+			time = self.host.time(self.timeBase) - (4*7*24*3600)
+			data = list(self.zCall(self.dev, 'readValues', time , time + (4*7*24*3600), None, self.timeBase) )
+			self.predictor.addSamples(data, time, self.timeBase)
+
+		if self.perfectPredictionsFlow:
+			pass
+		else:
+			# Flow
+			self.predictorFlow = WindowPredictor(self.timeBase)
+			time = self.host.time(self.timeBase) - (4*7*24*3600)
+			data = list(self.zCall(self.dev, 'readValuesFlow', time , time + (4*7*24*3600), None, self.timeBase) )
+			self.predictorFlow.addSamples(data, time, self.timeBase)
+			return
+
+
+	def doPredictionPower(self,  startTime,  endTime, adapt=False):
+		self.updateDeviceProperties()
+		self.lastPredictionUpdate = self.host.time()
+
+		if self.perfectPredictionsPower:
+			result = list(self.zCall(self.dev, 'readValues', startTime, endTime, None, self.timeBase) )
+		else:
+			result =  list(self.predictor.predictValues(startTime, int((endTime-startTime) / self.timeBase) ) )
+
+		return result
+
+	def doPredictionFlow(self,  startTime,  endTime, adapt=False):
+		self.updateDeviceProperties()
+		self.lastPredictionUpdate = self.host.time()
+
+		if self.perfectPredictionsFlow:
+			result = list(self.zCall(self.dev, 'readValuesFlow', startTime, endTime, None, self.timeBase) )
+		else:
+			result =  list(self.predictorFlow.predictValues(startTime, int((endTime-startTime) / self.timeBase) ) )
+
+		return result
+
