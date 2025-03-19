@@ -109,7 +109,7 @@ class SereneBoilerDev(Device):
 			if self.influx:
 				# FIXME: Need to adjust the readers to read the correct data from IECON
 				self.reader = InfluxDBReader(self.host.db.prefix+self.type, timeBase=self.timeBase, host=self.host, database=self.host.db.database, value = "W-power.real.c."+self.commodities[0])
-				self.readerFlow = InfluxDBReader(self.host.db.prefix+self.type, timeBase=self.timeBase, host=self.host, database=self.host.db.database, value = "W-power.real.c."+self.commodities[0])
+				self.readerFlow = InfluxDBReader(self.host.db.prefix+self.type, timeBase=self.timeBase, host=self.host, database=self.host.db.database, value = "m3s-flowrate.outlet")
 				if self.infuxTags is None:
 					self.reader.tags = {"name": self.name}
 					self.readerFlow.tags = {"name": self.name}
