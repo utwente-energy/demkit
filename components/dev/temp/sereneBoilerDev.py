@@ -63,13 +63,13 @@ class SereneBoilerDev(Device):
 		# We need to alter this based on the observations per boiler / make it self learning
 		self.profile = [complex(1000, 0), complex(1000, 0), complex(1000, 0), complex(1000, 0), complex(1000, 0), complex(1000, 0), complex(1000, 0), complex(1000, 0), complex(1000, 0), complex(1000, 0)]
 		
-		self.timeBase = 900 		# For now we use 15 min intervals
+		self.timeBase = 60 		# For now we use 15 min intervals
 		self.powerSetting = False 	# This flag will indicate whether the boiler should be turned on or not.
 
 		# From a loaddev to acquire a load profile with forecasts
 		#params
 		self.filename = None # for the active power
-		self.filnameFlow = None
+		self.filnameFlow = None # this one is for the flow
 		self.column = -1
 		self.scaling = 1.0
 
@@ -216,7 +216,7 @@ class SereneBoilerDev(Device):
 		self.lockState.acquire()
 		# NOTE: Currently no preemption is supported, but a forced shutdown is!
 		if self.available and self.jobProgress == 0:
-			self.keepOn = False
+			self.powerSetting = False
 
 		# planned value available, turn on
 		if self.available and self.jobProgress < len(self.profile):
@@ -227,7 +227,7 @@ class SereneBoilerDev(Device):
 
 		# No job, turn off
 		if not self.available:
-			self.keepOn = True
+			self.powerSetting = True
 
 
 		# eboiler change
@@ -238,6 +238,7 @@ class SereneBoilerDev(Device):
 			pass
 		else:
 			# here we turn it OFF
+			pass
 
 		# FIXME: Need to add something here to also log the actual data from the boiler through the platform
 
