@@ -21,6 +21,13 @@ from util.clientCsvReader import ClientCsvReader
 import util.helpers
 import math
 
+
+# TODO:
+# - Need to properly integrate this into the SEDCON framework
+# - Need to add some code to ensure we turn on the boiler if it is off and we measure significant (accumulated) flow
+#	This to ensure that hot water will be available
+
+
 class SereneBoilerDev(Device):	
 	def __init__(self,  name,  host, influx=False, reader=None, readerFlow=None):
 		Device.__init__(self,  name,  host)
@@ -61,9 +68,9 @@ class SereneBoilerDev(Device):
 
 		# A rather worst case setup with 2.5hrs running at 1kW to heat up the water
 		# We need to alter this based on the observations per boiler / make it self learning
-		self.profile = [complex(1000, 0), complex(1000, 0), complex(1000, 0), complex(1000, 0), complex(1000, 0), complex(1000, 0), complex(1000, 0), complex(1000, 0), complex(1000, 0), complex(1000, 0)]
+		self.profile = [complex(1000, 0)] * 150 		#150 minutes here
 		
-		self.timeBase = 60 		# For now we use 15 min intervals
+		self.timeBase = 60 	
 		self.powerSetting = False 	# This flag will indicate whether the boiler should be turned on or not.
 
 		# From a loaddev to acquire a load profile with forecasts
@@ -117,9 +124,8 @@ class SereneBoilerDev(Device):
 					self.reader.tags = self.infuxTags
 			elif self.filename is not None:
 				self.reader = ClientCsvReader(dataSource=self.filename, timeBase=self.timeBase, column=self.column, timeOffset=self.timeOffset, host=self.host)
-				if self.filnameFlow is not None
+				if self.filenameFlow is not None:
 					self.readerFlow = ClientCsvReader(dataSource=self.filenameFlow, timeBase=self.timeBase, column=self.column, timeOffset=self.timeOffset, host=self.host)
-
 
 		self.lockState.release()
 
@@ -207,7 +213,6 @@ class SereneBoilerDev(Device):
 
 		self.lockState.release()
 
-		self.lockState.release()
 
 	def timeTick(self, time, deltatime=0):
 		self.prunePlan()
@@ -373,7 +378,7 @@ class SereneBoilerDev(Device):
 		if timeBase is None:
 			timeBase = self.timeBase
 
-		r = self.readerFlow.readValueFlow(time, timeBase=timeBase)
+		r = self.readerFlow.readValue(time, timeBase=timeBase)
 		
 		if r is not None:
 			r = r  * self.scaling
