@@ -225,6 +225,20 @@ class SereneBoilerDev(Device):
 			self.powerSetting = True
 
 
+		# FIXME: Remove this code for deployment, this is just some dummycode for simulation purposes
+		if self.available and self.jobProgress < len(self.profile):
+
+			if c in self.plan and len(self.plan[c]) > 0:
+				# We can overrule the device by hard shutting it down :)
+				if self.plan[self.commodity][0][1].real >= 1:
+					self.consumption[self.commodity] = self.profile[self.jobProgress]
+				else:
+					self.consumption[self.commodity] = 0.0
+
+			elif c not in self.plan:
+				self.consumption[self.commodity] = self.profile[self.jobProgress]
+
+
 		# eboiler change
 		# Here we can add the code to actually send the command to turn on or off the boiler:
 		# FIXME: Needs to be implemented
@@ -369,9 +383,6 @@ class SereneBoilerDev(Device):
 			timeBase = self.timeBase
 
 		r = self.readerFlow.readValue(time, timeBase=timeBase)
-		
-		if r is not None:
-			r = r  * self.scaling
 
 		return r
 

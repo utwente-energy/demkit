@@ -150,7 +150,7 @@ class SereneBoilerCtrl(DevCtrl):
 
 		# Now plan all jobs
 		# NOTE profileResult is a pointer-style dictionary that is iteratively updated in the process!
-		# NOTE taken :) Thanks historical Gerwin for reminding me of this neat trick ;-)
+		# NOTE taken :) Thanks historical Gerwin for reminding me of this neat trick ;-)x
 		for job in jobs:
 			profileResult = self.doJobPlanning(s, job[0], job[1], profileResult, self.devDataPlanning)
 
@@ -287,9 +287,13 @@ class SereneBoilerCtrl(DevCtrl):
 		opt = OptAlg()
 		p = opt.timeShiftablePlanning(s.desired[c][startIdx:endIdx], devProfile, lowerLimits, upperLimits, s.prices[c][startIdx:endIdx], s.profileWeight)
 
+		# First reset the vector
+		for i in range(startIdx, endIdx):
+			profileResult[c][i] = 0
+
 		#now add the profile to the result vector
 		for i in range(0,  len(p)):
-			profileResult[c][i+startIdx] += p[i]
+			profileResult[c][i+startIdx] = p[i]
 
 		return profileResult
 
