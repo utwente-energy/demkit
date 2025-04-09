@@ -148,9 +148,6 @@ class SereneBoilerDev(Device):
 			self.jobProgress += math.ceil(self.host.timeBase / self.timeBase)
 			self.jobProgress = min(self.jobProgress, len(self.profile))
 
-			# eboiler changes, keep it on as soon as we have had a power event
-			self.powerSetting = True
-
 		#now check if we need to update the state
 		if not self.available:
 			if self.currentJobIdx+1 < len(self.jobs):
@@ -163,9 +160,6 @@ class SereneBoilerDev(Device):
 					self.available = True
 
 					self.timeTillDeadline = self.currentJob['endTime'] - self.currentJob['startTime']
-
-					# eboiler changes
-					self.powerSetting = False
 					
 					#new job has to start, lets request a planning for it!
 					if self.smartOperation and self.controller is not None:
@@ -173,12 +167,6 @@ class SereneBoilerDev(Device):
 						self.zCast(self.controller, 'triggerEvent', "stateUpdate")
 						self.lockState.acquire()
 			
-				# eboiler change
-				# otherwise, there is not a job and we should turn on/remain on!
-				else:
-					self.powerSetting = True
-			else:
-				self.powerSetting = True
 					
 
 		else:
@@ -189,7 +177,6 @@ class SereneBoilerDev(Device):
 			# eboiler changes
 			if self.currentJob['endTime'] <= self.host.time():
 				self.available = False
-				self.powerSetting = True
 
 
 
@@ -223,12 +210,15 @@ class SereneBoilerDev(Device):
 		if self.available and self.jobProgress == 0:
 			self.powerSetting = False
 
+
 		# planned value available, turn on
 		if self.available and self.jobProgress < len(self.profile):
 			if self.smartOperation and c in self.plan and len(self.plan[c]) > 0:
 				# a planning is available and we should run
 				if self.plan[self.commodity][0][1].real >= 1:
 					self.powerSetting = True
+			elif c not in self.plan:
+				self.powerSetting = True #<- Turn on the boiler if all planning fails
 
 		# No job, turn off
 		if not self.available:

@@ -117,14 +117,13 @@ class SereneBoilerCtrl(DevCtrl):
 		time = signal.time
 		timeBase = signal.timeBase
 
-		if self.predictionPlanningTime < time:
-			p = {}
+		p = {}
 
-			#Obtain the profile from a prediction. There is no flex to change this anyways
-			for c in self.commodities:
-				p[c] = self.doPredictionPower(time-(time%timeBase),  time-(time%timeBase)+timeBase*len(signal.desired[c]))
-				if len(p[c]) != signal.planHorizon:
-					p[c] = util.helpers.interpolate(p[c], signal.planHorizon)
+		#Obtain the profile from a prediction. There is no flex to change this anyways
+		for c in self.commodities:
+			p[c] = self.doPredictionPower(time-(time%timeBase),  time-(time%timeBase)+timeBase*len(signal.desired[c]))
+			if len(p[c]) != signal.planHorizon:
+				p[c] = util.helpers.interpolate(p[c], signal.planHorizon)
 
 		
 		profileResult = copy.deepcopy(p) # make a copy to merge the code
@@ -197,6 +196,7 @@ class SereneBoilerCtrl(DevCtrl):
 						profileResult[c][i] = self.cachedProfile[progress]
 						i+=1
 						progress+=1
+
 
 		# calculate the improvement
 		improvement = 0.0
@@ -332,10 +332,11 @@ class SereneBoilerCtrl(DevCtrl):
 
 
 		# In the meantime we also create a log in Grafana of the forecast of the flow to make this visible
-		time = signal.time
-		flowForecast = self.doPredictionFlow(time-(time%timeBase),  time-(time%timeBase)+timeBase*len(signal.desired[c]))
-		for i in range(0, len(flowForecast)):
-			self.logValue("m3s-flowrate.plan", flowForecast[i], int(signal.time + i * signal.timeBase))
+		for c in self.commodities:
+			time = signal.time
+			flowForecast = self.doPredictionFlow(time-(time%signal.timeBase),  time-(time%signal.timeBase)+signal.timeBase*len(signal.desired[c]))
+			for i in range(0, len(flowForecast)):
+				self.logValue("m3s-flowrate.plan", flowForecast[i], int(signal.time + i * signal.timeBase))
 
 
 
@@ -353,14 +354,14 @@ class SereneBoilerCtrl(DevCtrl):
 
 		# NOTE: Commented as we do not do event based planning
 		# #first check if we need to add a running job:
-		# if not self.useEventControl:
-		# 	#also add the current job if it applies:
-		# 	if self.devDataPlanning['available'] and self.devDataPlanning['jobProgress'] == 0:
-		# 		j = {}
-		# 		j['startTime'] = self.host.time()
-		# 		j['endTime'] = self.devDataPlanning['currentJob']['endTime']
-		# 		d = (j,  1) #add weight
-		# 		result.append(d)
+		if not self.useEventControl:
+			#also add the current job if it applies:
+			if self.devDataPlanning['available'] and self.devDataPlanning['jobProgress'] == 0:
+				j = {}
+				j['startTime'] = self.host.time()
+				j['endTime'] = self.devDataPlanning['currentJob']['endTime']
+				d = (j,  1) #add weight
+				result.append(d)
 
 		# NOTE: We do enforce perfect predictions for now, i.e. we specify the on times of the boiler manually
 		if True: #self.perfectPredictions:
