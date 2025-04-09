@@ -65,10 +65,12 @@ class SereneBoilerDev(Device):
 
 		# next to consumption we surely need to incorporate flow
 		self.flowrate = 0
+		self.accumulatedFlow = 0
+		self.flowThreshold = 10000 # FIXME; we need to determine the param to see what is an acceptable flow to force a turn on
 
 		# A rather worst case setup with 2.5hrs running at 1kW to heat up the water
 		# We need to alter this based on the observations per boiler / make it self learning
-		self.profile = [complex(1000, 0)] * 150 		#150 minutes here
+		self.profile = [complex(1000, 0)] * 90 		#150 minutes here
 		
 		self.timeBase = 60 	
 		self.powerSetting = False 	# This flag will indicate whether the boiler should be turned on or not.
@@ -84,6 +86,9 @@ class SereneBoilerDev(Device):
 		self.readerFlow = readerFlow
 		self.influx = influx
 		self.infuxTags = None
+
+		self.ctrl = None
+
 
 	def startup(self):
 		assert(self.strictComfort) # For now this device only will work in strictComfort mode
@@ -158,6 +163,8 @@ class SereneBoilerDev(Device):
 					self.jobProgress = 0
 
 					self.available = True
+					self.powerSetting = False
+					self.accumulatedFlow = 0 # reset the flow
 
 					self.timeTillDeadline = self.currentJob['endTime'] - self.currentJob['startTime']
 					
@@ -198,6 +205,8 @@ class SereneBoilerDev(Device):
 				self.consumption[c] = complex((total / (self.host.timeBase/self.timeBase)), 0.0)
 				self.flowrate = totalf
 
+		self.accumulatedFlow += self.flowrate
+
 		self.lockState.release()
 
 
@@ -206,19 +215,16 @@ class SereneBoilerDev(Device):
 		c = self.commodity
 
 		self.lockState.acquire()
-		# NOTE: Currently no preemption is supported, but a forced shutdown is!
-		if self.available and self.jobProgress == 0:
-			self.powerSetting = False
 
+		if self.ctrl is None:
+			self.powerSetting = True # Simply turn on if there is not a controller
 
 		# planned value available, turn on
-		if self.available and self.jobProgress < len(self.profile):
-			if self.smartOperation and c in self.plan and len(self.plan[c]) > 0:
+		elif self.available and self.jobProgress < len(self.profile):
+			if c in self.plan and len(self.plan[c]) > 0:
 				# a planning is available and we should run
 				if self.plan[self.commodity][0][1].real >= 1:
 					self.powerSetting = True
-			elif c not in self.plan:
-				self.powerSetting = True #<- Turn on the boiler if all planning fails
 
 		# No job, turn off
 		if not self.available:
@@ -226,17 +232,17 @@ class SereneBoilerDev(Device):
 
 
 		# FIXME: Remove this code for deployment, this is just some dummycode for simulation purposes
-		if self.available and self.jobProgress < len(self.profile):
+		if not self.powerSetting:
+			self.consumption[self.commodity] = 0.0
+		elif self.available and self.jobProgress < len(self.profile):
+			self.consumption[self.commodity] = self.profile[self.jobProgress]
 
-			if c in self.plan and len(self.plan[c]) > 0:
-				# We can overrule the device by hard shutting it down :)
-				if self.plan[self.commodity][0][1].real >= 1:
-					self.consumption[self.commodity] = self.profile[self.jobProgress]
-				else:
-					self.consumption[self.commodity] = 0.0
 
-			elif c not in self.plan:
-				self.consumption[self.commodity] = self.profile[self.jobProgress]
+
+
+		# Check if we need to force a turn on based on the accumulated flow
+		if self.accumulatedFlow >= self.flowThreshold:
+			self.powerSetting = True  # Force the boiler to turn on
 
 
 		# eboiler change
@@ -326,6 +332,17 @@ class SereneBoilerDev(Device):
 
 		startTime -= self.timeOffset
 		endTime -= self.timeOffset
+
+		# aligning jobs by timeBase
+		try:
+			if self.ctrl is not None:
+				# align timebases
+				if startTime%self.ctrl.timeBase >= 1:
+					startTime += self.ctrl.timeBase - (startTime%self.ctrl.timeBase)
+				if endTime%self.ctrl.timeBase >= 1:
+					endTime -= (endTime%self.ctrl.timeBase)
+		except:
+			pass 	# it is okay to have no controller, but not what is expected
 
 		j = {}
 		assert(startTime < endTime)
